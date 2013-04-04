@@ -31,7 +31,10 @@ process.on('message', function message(task) {
   });
 
   socket.on('message', function message(data) {
-    process.send({ type: 'message', latency: Date.now() - socket.last });
+    process.send({
+      type: 'message', latency: Date.now() - socket.last,
+      length: Buffer.byteLength(data || '')
+    });
   });
 
   socket.on('close', function close() {
