@@ -28,4 +28,35 @@ var cluster = require('cluster')
 cluster.setupMaster({ exec: '../thunderbolt.js', silent: true });
 while (workers--) cluster.fork();
 
+Object.keys(cluster.workers).forEach(function each(id) {
+  var worker = cluster.workers[id];
 
+  worker.on('message', function message(data) {
+    switch (data.type) {
+      case 'open':
+      case 'close':
+      case 'error':
+      case 'message':
+    }
+  });
+});
+
+//
+// Start.
+//
+var url = (cli.secure ? 'wss' : 'ws') +'://'+ cli.host +':'+ cli.port;
+[
+    ''
+  , 'Thor:                                                  version: '+ cli._version
+  , ''
+  , 'God of Thunder, son of Odin and smasher of WebSockets!'
+  , ''
+  , 'Thou shall:'
+  , '- Spawn '+ cli.workers +' workers.'
+  , '- Create '+ cli.concurrent + ' concurrent connections.'
+  , '- Smash '+ cli.amount +' connections with the mighty Mjölnir.'
+  , ''
+  , 'Prepare to suffer, '+ url + ' thy infidel.'
+].forEach(function stdout(line) {
+  console.log(line);
+});
