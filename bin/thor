@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+'use strict';
+
+var async = require('async')
+  , os = require('os');
+
+//
+// Setup the Command-Line Interface.
+//
+var cli = require('commander');
+
+cli.option('-p, --port <portnumber>', 'the port number of the server', parseInt, 80)
+   .option('-h, --host <hostname>', 'the host name of the server', 'localhost')
+   .option('-a, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
+   .option('-c, --concurrent <connections>', 'how many concurrent-connections should we establish', parseInt, 100)
+   .option('-b, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
+   .option('-w, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
+   .option('-s, --secure', 'establish a secure connection (wss://)')
+   .version(require('../package.json').version)
+   .parse(process.argv);
+
+//
+// By Odin's beard, unleash thunder!
+//
+var cluster = require('cluster')
+  , workers = cli.workers;
+
+cluster.setupMaster({ exec: '../thunderbolt.js', silent: true });
+while (workers--) cluster.fork();
+
+

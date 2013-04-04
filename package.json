@@ -1,0 +1,28 @@
+{
+  "name": "thor",
+  "version": "0.0.0",
+  "description": "Thor is WebSocket benchmark utility",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/observing/thor.git"
+  },
+  "keywords": [
+    "WebSocket",
+    "benchmark",
+    "load"
+  ],
+  "author": "Arnout Kazemier <opensource@observe.it>",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "1.1.x",
+    "ws": "0.4.x",
+    "async": "~0.2.6"
+  },
+  "bin": {
+    "thor": "./bin/thor"
+  }
+}
