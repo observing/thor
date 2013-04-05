@@ -2,6 +2,7 @@
 'use strict';
 
 var async = require('async')
+  , path = require('path')
   , os = require('os');
 
 //
@@ -15,6 +16,7 @@ cli.usage('[options] ws://localhost')
    .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
    .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
    .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
+   .option('-G, --generator <file>', 'custom message generators')
    .version(require('../package.json').version)
    .parse(process.argv);
 
@@ -22,11 +24,9 @@ cli.usage('[options] ws://localhost')
 // Check if all required arguments are supplied, if we don't have a valid url we
 // should bail out
 //
-var url = cli.args[0];
-
-if (!url) return [
+if (!cli.args.length) return [
     'Thor:'
-  , ''
+  , 'Odin is disapointed you... pithy human! You forgot to supply the urls.'
 ].forEach(function stderr(line) {
   console.error(line);
 });
@@ -38,7 +38,14 @@ var cluster = require('cluster')
   , workers = cli.workers || 1
   , robin = [];
 
-cluster.setupMaster({ exec: '../thunderbolt.js', silent: true });
+cluster.setupMaster({
+    exec: '../thunderbolt.js'
+  , silent: true
+  , args: cli.generator
+    ? path.resolve(process.cwd(), cli.generator)
+    : path.resolve(__dirname, '../session.js')
+});
+
 while (workers--) cluster.fork();
 
 Object.keys(cluster.workers).forEach(function each(id) {
@@ -73,12 +80,18 @@ var tick = cli.concurrent > 1000 ? 1 : 1000 / cli.concurrent
   , ''
   , 'Thou shall:'
   , '- Spawn '+ cli.workers +' workers.'
-  , '- Create '+ cli.concurrent + ' concurrent connections.'
+  , '- Create '+ cli.concurrent + ' concurrent/parallel connections.'
   , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
   , 'The answers you seek shall be yours, once I claim what is mine.'
 ].forEach(function stdout(line) {
   console.log(line);
+});
+
+// Iterate over all the urls so we can target multiple locations at once, which
+// is helpfull if you are testing multiple loadbalancer endpoints for example.
+cli.args.forEach(function (url) {
+
 });
 
 process.once('SIGINT', process.exit.bind(process, 0));

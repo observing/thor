@@ -3,6 +3,11 @@
 var Socket = require('ws')
   , collection = [];
 
+//
+// Get the session document that is used to generate the data.
+//
+var session = require(process.argv[1]);
+
 process.on('message', function message(task) {
   var now = Date.now();
 
