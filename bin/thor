@@ -9,21 +9,34 @@ var async = require('async')
 //
 var cli = require('commander');
 
-cli.option('-p, --port <portnumber>', 'the port number of the server', parseInt, 80)
-   .option('-h, --host <hostname>', 'the host name of the server', 'localhost')
-   .option('-a, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
-   .option('-c, --concurrent <connections>', 'how many concurrent-connections should we establish', parseInt, 100)
-   .option('-b, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
-   .option('-w, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
-   .option('-s, --secure', 'establish a secure connection (wss://)')
+cli.usage('[options] ws://localhost')
+   .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
+   .option('-C, --concurrent <connections>', 'how many concurrent-connections per second', parseInt, 100)
+   .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
+   .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
+   .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
    .version(require('../package.json').version)
    .parse(process.argv);
+
+//
+// Check if all required arguments are supplied, if we don't have a valid url we
+// should bail out
+//
+var url = cli.args[0];
+
+if (!url) return [
+    'Thor:'
+  , ''
+].forEach(function stderr(line) {
+  console.error(line);
+});
 
 //
 // By Odin's beard, unleash thunder!
 //
 var cluster = require('cluster')
-  , workers = cli.workers;
+  , workers = cli.workers || 1
+  , robin = [];
 
 cluster.setupMaster({ exec: '../thunderbolt.js', silent: true });
 while (workers--) cluster.fork();
@@ -39,12 +52,19 @@ Object.keys(cluster.workers).forEach(function each(id) {
       case 'message':
     }
   });
+
+  // Add our worker to our round robin queue so we can balance all our requests
+  // across the different workers that we spawned
+  robin.push(worker);
 });
 
 //
-// Start.
+// Up our WebSocket socket connections.
 //
-var url = (cli.secure ? 'wss' : 'ws') +'://'+ cli.host +':'+ cli.port;
+var tick = cli.concurrent > 1000 ? 1 : 1000 / cli.concurrent
+  , concurrent = cli.concurrent > 1000 ? cli.concurrent / 1000 : 1
+  , infinite = cli.amount === 0;
+
 [
     ''
   , 'Thor:                                                  version: '+ cli._version
@@ -54,9 +74,14 @@ var url = (cli.secure ? 'wss' : 'ws') +'://'+ cli.host +':'+ cli.port;
   , 'Thou shall:'
   , '- Spawn '+ cli.workers +' workers.'
   , '- Create '+ cli.concurrent + ' concurrent connections.'
-  , '- Smash '+ cli.amount +' connections with the mighty Mjölnir.'
+  , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
-  , 'Prepare to suffer, '+ url + ' thy infidel.'
+  , 'The answers you seek shall be yours, once I claim what is mine.'
 ].forEach(function stdout(line) {
   console.log(line);
+});
+
+process.once('SIGINT', process.exit.bind(process, 0));
+process.once('exit', function summary() {
+
 });
