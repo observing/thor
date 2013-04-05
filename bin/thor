@@ -13,7 +13,7 @@ var cli = require('commander');
 cli.usage('[options] ws://localhost')
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
    .option('-C, --concurrent <connections>', 'how many concurrent-connections per second', parseInt, 0)
-   .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
+   .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 1)
    .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
    .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
    .option('-G, --generator <file>', 'custom message generators')
@@ -40,10 +40,12 @@ var cluster = require('cluster')
 
 cluster.setupMaster({
     exec: path.resolve(__dirname, '../thunderbolt.js')
-  , silent: true
-  , args: cli.generator
-    ? path.resolve(process.cwd(), cli.generator)
-    : path.resolve(__dirname, '../generator.js')
+  , silent: false
+  , args: [
+      cli.generator
+      ? path.resolve(process.cwd(), cli.generator)
+      : path.resolve(__dirname, '../generator.js')
+    ]
 });
 
 while (workers--) cluster.fork();
@@ -54,9 +56,19 @@ Object.keys(cluster.workers).forEach(function each(id) {
   worker.on('message', function message(data) {
     switch (data.type) {
       case 'open':
+        worker.emit('open::'+ data.id);
+        break;
+
       case 'close':
+        worker.emit('close::'+ data.id);
+        break;
+
       case 'error':
+        worker.emit('error::'+ data.id);
+        break;
+
       case 'message':
+        worker.emit('message::'+ data.id);
     }
   });
 
@@ -90,24 +102,29 @@ async.forEach(cli.args, function forEach(url, done) {
   var i = cli.amount
     , completed = 0;
 
+  console.log('Connecting to %s\n', url);
+
   //
   // Create a simple WebSocket connection generator.
   //
   var queue = async.queue(function working(id, fn) {
     var worker = robin.shift();
+
     worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id });
+    worker.once('open::'+ id, fn);
 
     // Add the worker back at the end of the round robin queue.
     robin.push(worker);
-  }, cli.concurrent);
+  }, cli.concurrent || Infinity);
 
   // When all the events are processed successfully we should call.. back ;P
   queue.ondrain = done;
 
   // Add all connections to the processing queue;
   while (i--) queue.push(url +'::'+ i);
-, function established(err) {
+}, function established(err) {
   // All the connections have been established, for all urls for all the things
+  console.log('done');
 });
 
 process.once('SIGINT', process.exit.bind(process, 0));

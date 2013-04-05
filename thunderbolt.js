@@ -6,7 +6,7 @@ var Socket = require('ws')
 //
 // Get the session document that is used to generate the data.
 //
-var session = require(process.argv[1]);
+var session = require(process.argv[2]);
 
 process.on('message', function message(task) {
   var now = Date.now();
@@ -17,7 +17,7 @@ process.on('message', function message(task) {
   if ('write' in task) collection.forEach(function write(socket) {
     var start = socket.last = now;
 
-    session[task.method](task.size, function message(err, data) {
+    session[task.method || 'utfh8'](task.size, function message(err, data) {
       socket.send(data, function sending(err) {
         if (err) process.send({ type: 'error', message: err.message });
       });
@@ -38,6 +38,8 @@ process.on('message', function message(task) {
 
   socket.on('open', function open() {
     process.send({ type: 'open', duration: Date.now() - now, id: task.id });
+
+    write();
   });
 
   socket.on('message', function message(data) {
@@ -55,6 +57,24 @@ process.on('message', function message(task) {
   socket.on('error', function error(err) {
     process.send({ type: 'error', message: err.message, id: task.id });
   });
+
+
+  /**
+   * Helper function from writing messages to the socket.
+   *
+   * @api private
+   */
+  function write() {
+    var start = socket.last = Date.now();
+
+    session[task.method || 'utf8'](task.size, function message(err, data) {
+      socket.send(data, function sending(err) {
+        if (err) process.send({ type: 'error', message: err.message });
+
+        if (--task.messages) setTimeout(write, task.timeout || 100);
+      });
+    });
+  }
 
   // Adding a new socket to our socket collection.
   collection.push(socket);
