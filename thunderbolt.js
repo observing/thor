@@ -33,12 +33,14 @@ process.on('message', function message(task) {
   socket.on('open', function open() {
     process.send({ type: 'open', duration: Date.now() - now, id: task.id });
     write(socket, task);
+
+    // As the `close` event is fired after the internal `_socket` is cleaned up
+    // we need to do some hacky shit in order to tack the bytes send.
   });
 
   socket.on('message', function message(data) {
     process.send({
       type: 'message', latency: Date.now() - socket.last,
-      length: Buffer.byteLength(data || ''),
       id: task.id
     });
 
@@ -47,7 +49,11 @@ process.on('message', function message(task) {
   });
 
   socket.on('close', function close() {
-    process.send({ type: 'close', id: task.id });
+    process.send({
+      type: 'close', id: task.id,
+      read: socket._socket.bytesRead,
+      send: socket._socket.bytesWritten
+    });
   });
 
   socket.on('error', function error(err) {

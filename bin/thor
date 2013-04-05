@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-var async = require('async')
+var Metrics = require('../metrics')
+  , async = require('async')
   , path = require('path')
   , os = require('os');
 
@@ -56,18 +57,22 @@ Object.keys(cluster.workers).forEach(function each(id) {
   worker.on('message', function message(data) {
     switch (data.type) {
       case 'open':
+        metrics.handshaken(data);
         worker.emit('open::'+ data.id);
         break;
 
       case 'close':
+        metrics.close(data);
         worker.emit('close::'+ data.id);
         break;
 
       case 'error':
+        metrics.error(data);
         worker.emit('error::'+ data.id);
         break;
 
       case 'message':
+        metrics.message(data);
         worker.emit('message::'+ data.id);
     }
   });
@@ -96,6 +101,11 @@ Object.keys(cluster.workers).forEach(function each(id) {
   console.log(line);
 });
 
+//
+// Metrics collection.
+//
+var metrics = new Metrics(cli.amount * cli.args.length);
+
 // Iterate over all the urls so we can target multiple locations at once, which
 // is helpfull if you are testing multiple loadbalancer endpoints for example.
 async.forEach(cli.args, function forEach(url, done) {
@@ -123,11 +133,13 @@ async.forEach(cli.args, function forEach(url, done) {
   // Add all connections to the processing queue;
   while (i--) queue.push(url +'::'+ i);
 }, function established(err) {
+  metrics.established();
+
+  //
   // All the connections have been established, for all urls for all the things
+  // 
   console.log('done');
 });
 
 process.once('SIGINT', process.exit.bind(process, 0));
-process.once('exit', function summary() {
-
-});
+process.once('exit', function summary() { });
