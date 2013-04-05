@@ -12,7 +12,7 @@ var cli = require('commander');
 
 cli.usage('[options] ws://localhost')
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
-   .option('-C, --concurrent <connections>', 'how many concurrent-connections per second', parseInt, 100)
+   .option('-C, --concurrent <connections>', 'how many concurrent-connections per second', parseInt, 0)
    .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
    .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
    .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
@@ -39,11 +39,11 @@ var cluster = require('cluster')
   , robin = [];
 
 cluster.setupMaster({
-    exec: '../thunderbolt.js'
+    exec: path.resolve(__dirname, '../thunderbolt.js')
   , silent: true
   , args: cli.generator
     ? path.resolve(process.cwd(), cli.generator)
-    : path.resolve(__dirname, '../session.js')
+    : path.resolve(__dirname, '../generator.js')
 });
 
 while (workers--) cluster.fork();
@@ -68,10 +68,6 @@ Object.keys(cluster.workers).forEach(function each(id) {
 //
 // Up our WebSocket socket connections.
 //
-var tick = cli.concurrent > 1000 ? 1 : 1000 / cli.concurrent
-  , concurrent = cli.concurrent > 1000 ? cli.concurrent / 1000 : 1
-  , infinite = cli.amount === 0;
-
 [
     ''
   , 'Thor:                                                  version: '+ cli._version
@@ -80,7 +76,7 @@ var tick = cli.concurrent > 1000 ? 1 : 1000 / cli.concurrent
   , ''
   , 'Thou shall:'
   , '- Spawn '+ cli.workers +' workers.'
-  , '- Create '+ cli.concurrent + ' concurrent/parallel connections.'
+  , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
   , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
   , 'The answers you seek shall be yours, once I claim what is mine.'
@@ -90,8 +86,28 @@ var tick = cli.concurrent > 1000 ? 1 : 1000 / cli.concurrent
 
 // Iterate over all the urls so we can target multiple locations at once, which
 // is helpfull if you are testing multiple loadbalancer endpoints for example.
-cli.args.forEach(function (url) {
+async.forEach(cli.args, function forEach(url, done) {
+  var i = cli.amount
+    , completed = 0;
 
+  //
+  // Create a simple WebSocket connection generator.
+  //
+  var queue = async.queue(function working(id, fn) {
+    var worker = robin.shift();
+    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id });
+
+    // Add the worker back at the end of the round robin queue.
+    robin.push(worker);
+  }, cli.concurrent);
+
+  // When all the events are processed successfully we should call.. back ;P
+  queue.ondrain = done;
+
+  // Add all connections to the processing queue;
+  while (i--) queue.push(url +'::'+ i);
+, function established(err) {
+  // All the connections have been established, for all urls for all the things
 });
 
 process.once('SIGINT', process.exit.bind(process, 0));
