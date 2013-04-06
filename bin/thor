@@ -142,4 +142,8 @@ async.forEach(cli.args, function forEach(url, done) {
 });
 
 process.once('SIGINT', process.exit.bind(process, 0));
-process.once('exit', function summary() { });
+process.once('exit', function summary() {
+  metrics.stop();
+
+  console.log(JSON.stringify(metrics.summary(), null, 2));
+});

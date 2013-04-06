@@ -1,5 +1,14 @@
 'use strict';
 
+var Stats = require('fast-stats').Stats
+  , sugar = require('sugar');
+
+/**
+ * Metrics collection and generation.
+ *
+ * @constructor
+ * @param {Number} requests The total amount of requests scheduled to be send
+ */
 function Metrics(requests) {
   this.requests = requests;             // The total amount of requests send
 
@@ -10,8 +19,8 @@ function Metrics(requests) {
   this.errors = Object.create(null);    // Collection of different errors
   this.timing = Object.create(null);    // Different timings
 
-  this.latency = [];                    // Latencies of the echo'd messages
-  this.handshaking = [];                // Handshake duration
+  this.latency = new Stats();           // Latencies of the echo'd messages
+  this.handshaking = new Stats();       // Handshake duration
 
   this.read = 0;                        // Bytes read
   this.send = 0;                        // Bytes send
@@ -33,6 +42,8 @@ Metrics.prototype.start = function start() {
  * @api public
  */
 Metrics.prototype.stop = function stop() {
+  if (this.timing.stop) return this;
+
   this.timing.stop = Date.now();
   this.timing.duration = this.timing.stop - this.timing.start;
   return this;
@@ -106,9 +117,25 @@ Metrics.prototype.close = function close(data) {
 /**
  * Generate a summary of the metrics.
  *
+ * @returns {Object} The summary
  * @api public
  */
 Metrics.prototype.summary = function summary() {
+  var errorRate = 0;
+
+  // Calculate the total amount of errors
+  Object.keys(this.errors).forEach(function forEach(err) {
+    errorRate = errorRate + this.errors[err];
+  }, this);
+
+  return {
+    'Total received': this.read.bytes(),
+    'Total transfered': this.send.bytes(),
+    'Time taken for tests': this.timing.duration.duration(),
+    'Connections created': this.connections,
+    'Handshake duration (median)': this.handshaking.median().duration(),
+    'Message latency (median)': this.latency.median().duration()
+  };
 };
 
 //

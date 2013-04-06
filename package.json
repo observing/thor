@@ -19,8 +19,10 @@
   "license": "MIT",
   "dependencies": {
     "commander": "1.1.x",
-    "ws": "0.4.x",
-    "async": "~0.2.6"
+    "async": "0.2.x",
+    "ws": "git://github.com/3rd-Eden/ws.git",
+    "sugar": "git://github.com/bluesmoon/node-faststats.git",
+    "tab": "0.1.x"
   },
   "bin": {
     "thor": "./bin/thor"
