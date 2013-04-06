@@ -20,9 +20,9 @@
   "dependencies": {
     "commander": "1.1.x",
     "async": "0.2.x",
+    "tab": "0.1.x",
     "ws": "git://github.com/3rd-Eden/ws.git",
-    "sugar": "git://github.com/bluesmoon/node-faststats.git",
-    "tab": "0.1.x"
+    "sugar": "git://github.com/bluesmoon/node-faststats.git"
   },
   "bin": {
     "thor": "./bin/thor"

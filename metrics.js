@@ -1,7 +1,8 @@
 'use strict';
 
 var Stats = require('fast-stats').Stats
-  , sugar = require('sugar');
+  , sugar = require('sugar')
+  , table = require('tab');
 
 /**
  * Metrics collection and generation.
@@ -121,21 +122,122 @@ Metrics.prototype.close = function close(data) {
  * @api public
  */
 Metrics.prototype.summary = function summary() {
-  var errorRate = 0;
+  var results = new table.TableOutputStream({ columns: [
+    { label: '', width: 20 },
+    { label: '' }
+  ]});
 
-  // Calculate the total amount of errors
-  Object.keys(this.errors).forEach(function forEach(err) {
-    errorRate = errorRate + this.errors[err];
-  }, this);
+  results.writeRow(['Time taken', this.timing.duration.duration()]);
+  results.writeRow(['Connections established', this.timing.established.duration()]);
+  results.writeRow(['Connected', this.connections]);
+  results.writeRow(['Disconnected', this.disconnects]);
+  results.writeRow(['Failed', this.failures]);
 
-  return {
-    'Total received': this.read.bytes(),
-    'Total transfered': this.send.bytes(),
-    'Time taken for tests': this.timing.duration.duration(),
-    'Connections created': this.connections,
-    'Handshake duration (median)': this.handshaking.median().duration(),
-    'Message latency (median)': this.latency.median().duration()
-  };
+  results.writeRow(['Total transferred', this.send.bytes(2)]);
+  results.writeRow(['Total received', this.read.bytes(2)]);
+
+  // Up next is outputting the series.
+  var handshaking = this.handshaking
+    , latency = this.latency
+    , hrange = handshaking.range()
+    , lrange = latency.range();
+
+  //
+  // Generate the width of the columns, based on the length of the longest
+  // number. If it's less then the max size of a label, we default to that.
+  // After that we also pad the strings with 1 char for extra spacing.
+  //
+  var width = (lrange[1] > hrange[1] ? lrange[1] : hrange[1]).toString().length;
+  if (width < 6) width = 6;
+  width++;
+
+  console.log();
+  console.log('Durations (ms)');
+  table.emitTable({
+    columns: [
+      { label: '', width: 20 },
+      { label: 'min', width: width, align: 'left' },
+      { label: 'mean', width: width, align: 'left' },
+      { label: 'stddev', width: width, align: 'right' },
+      { label: 'median', width: width, align: 'right' },
+      { label: 'max', width: width, align: 'left' }
+    ],
+    rows: [
+      [
+        'Handshaking:',
+        hrange[0].toFixed(),
+        handshaking.amean().toFixed(),
+        handshaking.stddev().toFixed(),
+        handshaking.median().toFixed(),
+        hrange[1].toFixed()
+      ],
+      [
+        'Latency:',
+        lrange[0].toFixed(),
+        latency.amean().toFixed(),
+        latency.stddev().toFixed(),
+        latency.median().toFixed(),
+        lrange[1].toFixed()
+      ]
+    ]
+  });
+  console.log();
+
+  console.log('Durations (ms)');
+  table.emitTable({
+    columns: [
+      { label: '', width: 20 },
+      { label: ' 50%', width: width },
+      { label: ' 66%', width: width },
+      { label: ' 75%', width: width },
+      { label: ' 80%', width: width },
+      { label: ' 90%', width: width },
+      { label: ' 95%', width: width },
+      { label: ' 98%', width: width },
+      { label: ' 98%', width: width },
+      { label: '100%', width: width },
+    ],
+    rows: [
+      [
+        'Handshaking:',
+        handshaking.percentile(50).toFixed(),
+        handshaking.percentile(66).toFixed(),
+        handshaking.percentile(75).toFixed(),
+        handshaking.percentile(80).toFixed(),
+        handshaking.percentile(90).toFixed(),
+        handshaking.percentile(95).toFixed(),
+        handshaking.percentile(98).toFixed(),
+        handshaking.percentile(99).toFixed(),
+        handshaking.percentile(100).toFixed()
+      ],
+      [
+        'Latency:',
+        latency.percentile(50).toFixed(),
+        latency.percentile(66).toFixed(),
+        latency.percentile(75).toFixed(),
+        latency.percentile(80).toFixed(),
+        latency.percentile(90).toFixed(),
+        latency.percentile(95).toFixed(),
+        latency.percentile(98).toFixed(),
+        latency.percentile(99).toFixed(),
+        latency.percentile(100).toFixed()
+      ]
+    ]
+  });
+
+  //
+  // Output more error information, there could be multiple causes on why we
+  // failed to send a message.
+  //
+  if (this.failures) {
+    console.log('Received errors:');
+
+    Object.keys(this.errors).forEach(function error(err) {
+      results.writeRow([this.errors[err] +'x', err]);
+    }, this);
+
+    console.log();
+  }
 };
 
 //
