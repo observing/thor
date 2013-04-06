@@ -21,6 +21,7 @@
     "commander": "1.1.x",
     "async": "0.2.x",
     "tab": "0.1.x",
+    "colors": "0.6.x",
     "ws": "git://github.com/3rd-Eden/ws.git",
     "sugar": "git://github.com/bluesmoon/node-faststats.git"
   },

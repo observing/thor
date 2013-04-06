@@ -1,6 +1,7 @@
 'use strict';
 
 var Stats = require('fast-stats').Stats
+  , colors = require('colors')
   , sugar = require('sugar')
   , table = require('tab');
 
@@ -25,6 +26,9 @@ function Metrics(requests) {
 
   this.read = 0;                        // Bytes read
   this.send = 0;                        // Bytes send
+
+  // Start tracking
+  this.start();
 }
 
 /**
@@ -127,8 +131,9 @@ Metrics.prototype.summary = function summary() {
     { label: '' }
   ]});
 
-  results.writeRow(['Time taken', this.timing.duration.duration()]);
-  results.writeRow(['Connections established', this.timing.established.duration()]);
+  console.log();
+  results.writeRow(['Online', this.timing.established + ' milliseconds']);
+  results.writeRow(['Time taken', this.timing.duration + ' milliseconds']);
   results.writeRow(['Connected', this.connections]);
   results.writeRow(['Disconnected', this.disconnects]);
   results.writeRow(['Failed', this.failures]);
@@ -152,7 +157,9 @@ Metrics.prototype.summary = function summary() {
   width++;
 
   console.log();
-  console.log('Durations (ms)');
+  console.log('Durations (ms):');
+  console.log();
+
   table.emitTable({
     columns: [
       { label: '', width: 20 },
@@ -164,7 +171,7 @@ Metrics.prototype.summary = function summary() {
     ],
     rows: [
       [
-        'Handshaking:',
+        'Handshaking',
         hrange[0].toFixed(),
         handshaking.amean().toFixed(),
         handshaking.stddev().toFixed(),
@@ -172,7 +179,7 @@ Metrics.prototype.summary = function summary() {
         hrange[1].toFixed()
       ],
       [
-        'Latency:',
+        'Latency',
         lrange[0].toFixed(),
         latency.amean().toFixed(),
         latency.stddev().toFixed(),
@@ -181,9 +188,11 @@ Metrics.prototype.summary = function summary() {
       ]
     ]
   });
+
+  console.log();
+  console.log('Percentile (ms):');
   console.log();
 
-  console.log('Durations (ms)');
   table.emitTable({
     columns: [
       { label: '', width: 20 },
@@ -199,7 +208,7 @@ Metrics.prototype.summary = function summary() {
     ],
     rows: [
       [
-        'Handshaking:',
+        'Handshaking',
         handshaking.percentile(50).toFixed(),
         handshaking.percentile(66).toFixed(),
         handshaking.percentile(75).toFixed(),
@@ -211,7 +220,7 @@ Metrics.prototype.summary = function summary() {
         handshaking.percentile(100).toFixed()
       ],
       [
-        'Latency:',
+        'Latency',
         latency.percentile(50).toFixed(),
         latency.percentile(66).toFixed(),
         latency.percentile(75).toFixed(),
@@ -230,13 +239,13 @@ Metrics.prototype.summary = function summary() {
   // failed to send a message.
   //
   if (this.failures) {
+    console.log();
     console.log('Received errors:');
+    console.log();
 
     Object.keys(this.errors).forEach(function error(err) {
       results.writeRow([this.errors[err] +'x', err]);
     }, this);
-
-    console.log();
   }
 };
 
