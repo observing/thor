@@ -65,3 +65,16 @@ Google it.
     -b, --binary                    send binary messages instead of utf-8
     -V, --version                   output the version number
 ```
+
+Some small notes about the options:
+
+- `--protocol` is the protocol version number. If you want to use the *HyBi drafts
+  07-12* use `8` as argument or if you want to use the *HyBi drafts 13-17*
+  drafts which are the default version use `13`.
+- `--buffer` should be size of the message in bytes.
+- `--workers` as Node.js is single threaded this sets the amount of sub
+  processes to handle all the heavy lifting.
+
+### License
+
+MIT
