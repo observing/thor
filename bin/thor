@@ -102,7 +102,7 @@ Object.keys(cluster.workers).forEach(function each(id) {
   });
 
   // Add our worker to our round robin queue so we can balance all our requests
-  // across the different workers that we spawned
+  // across the different workers that we spawned.
   robin.push(worker);
 });
 
@@ -121,6 +121,7 @@ Object.keys(cluster.workers).forEach(function each(id) {
   , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
   , 'The answers you seek shall be yours, once I claim what is mine.'
+  , ''
 ].forEach(function stdout(line) {
   console.log(line);
 });
@@ -136,7 +137,7 @@ async.forEach(cli.args, function forEach(url, done) {
   var i = cli.amount
     , completed = 0;
 
-  console.log('Connecting to %s\n', url);
+  console.log('Connecting to %s', url);
 
   //
   // Create a simple WebSocket connection generator.
@@ -164,6 +165,8 @@ async.forEach(cli.args, function forEach(url, done) {
 }, function established(err) {
   metrics.established();
 });
+
+console.log('');
 
 process.once('SIGINT', process.exit.bind(process, 0));
 process.once('exit', function summary() {
