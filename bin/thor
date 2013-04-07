@@ -46,7 +46,7 @@ var cluster = require('cluster')
   , robin = [];
 
 cluster.setupMaster({
-    exec: path.resolve(__dirname, '../thunderbolt.js')
+    exec: path.resolve(__dirname, '../mjolnir.js')
   , silent: false
   , args: [
       cli.generator
@@ -78,13 +78,14 @@ Object.keys(cluster.workers).forEach(function each(id) {
 
       case 'close':
         delete ids[data.id];
-        console.log('dead');
 
         metrics.close(data);
         worker.emit('close::'+ data.id);
         break;
 
       case 'error':
+        delete ids[data.id];
+
         metrics.error(data);
         worker.emit('error::'+ data.id);
         break;

@@ -58,14 +58,20 @@ process.on('message', function message(task) {
     });
 
     // Only write as long as we are allowed to send messages
-    if (--task.messages) write(socket, task, task.id);
+    if (--task.messages) {
+      write(socket, task, task.id);
+    } else {
+      socket.close();
+    }
   });
 
   socket.on('close', function close() {
+    var internal = socket._socket || {};
+
     process.send({
       type: 'close', id: task.id,
-      read: socket._socket.bytesRead,
-      send: socket._socket.bytesWritten
+      read: internal.bytesRead || 0,
+      send: internal.bytesWritten || 0
     });
   });
 
