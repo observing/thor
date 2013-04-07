@@ -75,6 +75,20 @@ Some small notes about the options:
 - `--workers` as Node.js is single threaded this sets the amount of sub
   processes to handle all the heavy lifting.
 
+### Custom messages
+
+Some WebSocket servers have their own custom messaging protocol. In order to
+work with those servers we introduced a concept called `generators` a generator
+is a small JavaScript file that can output `utf8` and `binary` messages. It uses
+a really simple generator by default. 
+
+Checkout https://github.com/observing/thor/blob/master/generator.js for an
+example of a generator.
+
+```
+thor --amount 1000 --generator <file.js> ws://localhost:8080
+```
+
 ### Example
 
 ```
