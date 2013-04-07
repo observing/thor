@@ -169,7 +169,13 @@ async.forEach(cli.args, function forEach(url, done) {
 
 console.log('');
 
-process.once('SIGINT', process.exit.bind(process, 0));
+process.once('SIGINT', function end() {
+  robin.forEach(function nuke(worker) {
+    try { worker.send({ shutdown: true }); }
+    catch (e) {}
+  })
+});
+
 process.once('exit', function summary() {
-  metrics.stop().summary();
+  metrics.established().stop().summary();
 });

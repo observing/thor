@@ -60,8 +60,11 @@ Metrics.prototype.stop = function stop() {
  * @api public
  */
 Metrics.prototype.established = function established() {
+  if (this.timing.established) return this;
+
   this.timing.ready = Date.now();
   this.timing.established = this.timing.ready - this.timing.start;
+  return this;
 };
 
 /**
@@ -247,6 +250,8 @@ Metrics.prototype.summary = function summary() {
       results.writeRow([this.errors[err] +'x', err]);
     }, this);
   }
+
+  return this;
 };
 
 //
