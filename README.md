@@ -75,6 +75,63 @@ Some small notes about the options:
 - `--workers` as Node.js is single threaded this sets the amount of sub
   processes to handle all the heavy lifting.
 
+### Example
+
+```
+thor --amount 1000 --messages 100 ws://localhost:8080
+```
+
+This will hit the WebSocket server that runs on localhost:8080 with 1000
+connections and sends 100 messages over each established connection. Once `thor`
+is done with smashing your connections it will generate a detailed report:
+
+```
+Thor:                                                  version: 1.0.0
+
+God of Thunder, son of Odin and smasher of WebSockets!
+
+Thou shall:
+- Spawn 4 workers.
+- Create all the concurrent/parallel connections.
+- Smash 1000 connections with the mighty Mjölnir.
+
+The answers you seek shall be yours, once I claim what is mine.
+
+Connecting to ws://localhost:8080
+
+  Opened 100 connections
+  Opened 200 connections
+  Opened 300 connections
+  Opened 400 connections
+  Opened 500 connections
+  Opened 600 connections
+  Opened 700 connections
+  Opened 800 connections
+  Opened 900 connections
+  Opened 1000 connections
+
+
+Online               15000 milliseconds
+Time taken           31775 milliseconds
+Connected            1000
+Disconnected         0
+Failed               0
+Total transferred    120.46MB
+Total received       120.43MB
+
+Durations (ms):
+
+                     min     mean     stddev  median max
+Handshaking          217     5036       4094    3902 14451
+Latency              0       215         104     205 701
+
+Percentile (ms):
+
+                      50%     66%     75%     80%     90%     95%     98%     98%    100%
+Handshaking          3902    6425    8273    9141    11409   12904   13382   13945   14451
+Latency              205     246     266     288     371     413     437     443     701
+```
+
 ### License
 
 MIT
