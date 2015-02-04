@@ -22,6 +22,7 @@ cli.usage('[options] ws://localhost')
    .option('-G, --generator <file>', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
+   .option('-S, --SSLcertificate <file>','supply the SSL certificate location for wss connections')
    .version(require('../package.json').version)
    .parse(process.argv);
 
@@ -56,7 +57,13 @@ cluster.setupMaster({
       : path.resolve(__dirname, '../generator.js'),
       cli.protocol,
       !!cli.masked,
-      !!cli.binary
+      !!cli.binary,
+      cli.SSLcertificate 
+      ? path.resolve(process.cwd(), cli.SSLcertificate)
+      : undefined ,
+      cli.SSLcertificate
+      ? 'true'
+      : 'false',
     ]
 });
 
