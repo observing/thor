@@ -206,7 +206,7 @@ Metrics.prototype.summary = function summary() {
       { label: ' 90%', width: width },
       { label: ' 95%', width: width },
       { label: ' 98%', width: width },
-      { label: ' 98%', width: width },
+      { label: ' 99%', width: width },
       { label: '100%', width: width },
     ],
     rows: [
