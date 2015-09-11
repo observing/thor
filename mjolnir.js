@@ -46,23 +46,24 @@ process.on('message', function message(task) {
 
   socket.on('open', function open() {
     process.send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent });
-    write(socket, task, task.id);
 
     // As the `close` event is fired after the internal `_socket` is cleaned up
     // we need to do some hacky shit in order to tack the bytes send.
   });
 
   socket.on('message', function message(data) {
-    process.send({
-      type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
-      id: task.id
-    });
+    console.log(data);
+    data = JSON.parse(data);
 
-    // Only write as long as we are allowed to send messages
-    if (--task.messages) {
-      write(socket, task, task.id);
-    } else {
+    if (data.event === "new_notification") {
       socket.close();
+    } else if (data.event === "pusher_internal:subscription_succeeded") {
+      process.send({
+        type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
+        id: task.id
+      });
+    } else if (data.event === "pusher:connection_established") {
+      write(socket, task, task.id);
     }
   });
 
