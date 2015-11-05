@@ -11,7 +11,7 @@ var Metrics = require('../metrics')
 //
 var cli = require('commander');
 
-cli.usage('[options] ws://localhost')
+cli.usage('[options] ws://localhost[@@vip]')
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
    .option('-C, --concurrent <connections>[deprecated]', 'how many concurrent-connections per second', parseInt, 0)
    .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
@@ -21,7 +21,7 @@ cli.usage('[options] ws://localhost')
    .option('-G, --generator <file>', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('-T, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
+   .option('-T, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited and u must stop by ctrl+c', parseInt, -1)
    .version(require('../package.json').version)
    .parse(process.argv);
 
@@ -40,14 +40,17 @@ if (!cli.args.length) return [
 // By Odin's beard, unleash thunder!
 //
 var cluster = require('cluster')
-  , workers = cli.workers || 1
-  , ids = Object.create(null)
+  , worker_num = cli.workers || 1
+  , worker_num = worker_num > cli.amount * cli.args.length ? cli.amount * cli.args.length : worker_num
+  , forked_worker_num = worker_num
+  , connect_ids = Object.create(null)
   , connections = 0
+  , connecteds = {}
   , received = 0
   , robin = [];
 
 cluster.setupMaster({
-    exec: path.resolve(__dirname, '../mjolnir.js')
+    exec: path.resolve(__dirname, '../worker-socketio.js')
   , silent: false
   , args: [
       cli.generator
@@ -59,14 +62,13 @@ cluster.setupMaster({
     ]
 });
 
-while (workers--) cluster.fork();
+while (worker_num--) cluster.fork();
 
 Object.keys(cluster.workers).forEach(function each(id) {
   var worker = cluster.workers[id];
 
   worker.on('message', function message(data) {
   
-  // console.info('catch worker message ' + (data.datas.length));
   var datas = [];
   if (data.collection) {
     datas = data.datas;
@@ -77,6 +79,19 @@ Object.keys(cluster.workers).forEach(function each(id) {
     var data = datas[i];
 
     switch (data.type) {
+      case 'connected':
+        connecteds[data.worker_id] = data.connected;
+        var all_connected = 0,
+            all_workers = 0;
+        Object.keys(connecteds).forEach(function each(id) {
+          all_workers++;
+          all_connected += connecteds[id];
+          console.log('[Master] %s connected, msg received %s in workers %s', connecteds[id], data.received_msg, id);
+        });
+        // Output the connection progress
+        console.log('[Master] %s connected, in %s workers' + "\n", all_connected, all_workers);
+        break;
+
       case 'opened':
         worker.emit('opened::'+ data.id);
 
@@ -99,14 +114,14 @@ Object.keys(cluster.workers).forEach(function each(id) {
         break;
 
       case 'close':
-        delete ids[data.id];
+        delete connect_ids[data.id];
 
         metrics.close(data);
         // worker.emit('close::'+ data.id);
         break;
 
       case 'error':
-        delete ids[data.id];
+        delete connect_ids[data.id];
 
         metrics.error(data);
         // worker.emit('error::'+ data.id);
@@ -124,7 +139,7 @@ Object.keys(cluster.workers).forEach(function each(id) {
     //
     // Check if we have processed all connections so we can quit cleanly.
     //
-    if (!Object.keys(ids).length) process.exit();
+    if (!Object.keys(connect_ids).length) process.exit();
   });
 
   // Add our worker to our round robin queue so we can balance all our requests
@@ -142,7 +157,7 @@ Object.keys(cluster.workers).forEach(function each(id) {
   , 'God of Thunder, son of Odin and smasher of WebSockets!'
   , ''
   , 'Thou shall:'
-  , '- Spawn '+ cli.workers +' workers.'
+  , '- Spawn '+ forked_worker_num +' workers.'
   , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
   , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
@@ -171,21 +186,21 @@ async.forEach(cli.args, function forEach(url, done) {
   //
   // Create a simple WebSocket connection generator.
   //
-  var queue = async.queue(function working(id, fn) {
+  var queue = async.queue(function working(connect_id, fn) {
     var worker = robin.shift();
 
     // Register the id, so we can keep track of the connections that we still
     // need to process.
-    ids[id] = 1;
+    connect_ids[connect_id] = 1;
 
     // Process the connections
-    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id, runtime: cli.runtime, localaddr: localaddr, send_opened: (cli.concurrent && cli.concurrent < cli.amount) });
+    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: connect_id, runtime: cli.runtime, localaddr: localaddr, send_opened: (cli.concurrent && cli.concurrent < cli.amount) });
 
     // do it if cuncurrent is not 0 and smaller than the amount of all tcp connections
+    // we have to set this event to roll process to next connect
     if (cli.concurrent && cli.concurrent < cli.amount) {
-      worker.once('opened::'+ id, fn);
+      worker.once('opened::'+ connect_id, fn);
     };
-    // worker.once('open::'+ id, fn);
 
     // Add the worker back at the end of the round robin queue.
     robin.push(worker);
@@ -194,15 +209,15 @@ async.forEach(cli.args, function forEach(url, done) {
   // When all the events are processed successfully we should call.. back ;P
   queue.drain = done;
 
-  // Add all connections to the processing queue;
+  // Add all connections to the processing queue; //.push(connect_id)
   while (i--) queue.push(url + (localaddr ? '::'+localaddr : '') +'::'+ i);
 }, function established(err) {
   metrics.established();
 });
 
 console.log('');
-// console.log("worker num:"+robin.length);
 
+// ctrl + c
 process.on('SIGINT', function end() {
   robin.forEach(function nuke(worker) {
     try { worker.send({ shutdown: true }); }
@@ -212,31 +227,6 @@ process.on('SIGINT', function end() {
 
 process.on('exit', function summary() {
   console.log('-----------------');
-/*
-//
-// Up our WebSocket socket connections.
-//
-[
-    ''
-  , 'Thor:                                                  version: '+ cli._version
-  , ''
-  , 'God of Thunder, son of Odin and smasher of WebSockets!'
-  , ''
-  , 'Thou shall:'
-  , '- Spawn '+ cli.workers +' workers.'
-  , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
-  , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
-  , ''
-  , 'The answers you seek shall be yours, once I claim what is mine.'
-  , ''
-].forEach(function stdout(line) {
-  console.log(line);
-});
-*/
-  // console.log('---------process exit in 2 seconds--------');
-  /*setTimeout(function () {
-    console.log('');
-    metrics.established().stop().summary();
-  }, 3000);*/
+
   metrics.established().stop().summary();
 });

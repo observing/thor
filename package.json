@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/observing/thor.git"
+    "url": "https://github.com/iorichina/thor.git"
   },
   "keywords": [
     "WebSocket",
@@ -18,6 +18,7 @@
   "author": "Arnout Kazemier <opensource@observe.it>",
   "license": "MIT",
   "dependencies": {
+    "engine.io-client": "git://github.com/iorichina/engine.io-client.git#1.5.4",
     "commander": "1.1.x",
     "async": "0.2.x",
     "tab": "0.1.x",
@@ -27,6 +28,7 @@
     "sugar": "1.3.8"
   },
   "bin": {
-    "thor": "./bin/thor"
+    "thor": "./bin/thor",
+    "thor-socketio": "./bin/socketio"
   }
 }

@@ -17,7 +17,7 @@ Once you have Node.js installed, you can use the bundled package manager `npm` t
 install this module:
 
 ```
-npm install -g thor
+npm install -g https://github.com/iorichina/thor.git
 ```
 
 The `-g` command flag tells `npm` to install the module globally on your system.
