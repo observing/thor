@@ -1,7 +1,8 @@
 'use strict';
 
 var Socket = require('ws')
-  , connections = {};
+  , connections = {}
+  , concurrent = 0;
 
 //
 // Get the session document that is used to generate the data.
@@ -16,7 +17,28 @@ var masked = process.argv[4] === 'true'
   , protocol = +process.argv[3] || 13;
 
 // 收集后一次性send给master
-var metrics_datas = {collection:true, datas:[]};
+var metrics_datas = {collection:true, datas:[]}
+  , process_send = function(data, task) {
+      if (task.realtimeStat || ('open' == data.type && task.openedStat)) {
+        process.send(data);
+      }else{
+        metrics_datas.datas.push(data);
+      }
+    }
+  , checkConnectionLength = function(interval){
+      if (Object.keys(connections).length <= 0) {
+        if (interval) {
+          clearInterval(interval);
+        };
+        // 一次性发送
+        process.send(metrics_datas, null, function clearDatas(err){
+          // invoked after the message is sent but before the target may have received it
+          if (err) {return;};
+          // WARNING: maybe we should use synchronize method here
+          metrics_datas.datas = [];
+        });
+      };
+    };
 
 process.on('message', function message(task) {
   var now = Date.now();
@@ -42,111 +64,83 @@ process.on('message', function message(task) {
   // End of the line, we are gonna start generating new connections.
   if (!task.url) return;
 
-  var sock_opts = {
-    protocolVersion: protocol
-  };
-
-  if (task.localaddr) {
-    sock_opts.localAddress = task.localaddr;
-  };
-  var socket = new Socket(task.url, sock_opts);
+  var socket = new Socket(task.url, {
+    protocolVersion: protocol,
+    localAddress: task.localaddr || null
+  });
   socket.last = Date.now();
-  var inteval = null;
+  var interval = null;
 
   socket.on('open', function open() {
-    var send_data = { type: 'open', duration: Date.now() - now, id: task.id };
-    // process.send(send_data);
-    metrics_datas.datas.push(send_data);
+    process_send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent });
     // write(socket, task, task.id);
-    // 
-    if (task.send_opened) {
-      process.send({ type: 'opened', duration: Date.now() - now, id: task.id });
-    };
 
-    inteval = setInterval(function ping(id, socket) {
-      if(socket && (typeof socket.ping == 'function')) {
-        socket.ping();
-      }else{
-        clearInterval(inteval);
-      }
-    }, 25000, task.id, socket);
+    if (task.pingInterval && task.pingInterval > 0) {
+      interval = setInterval(function ping(id, socket) {
+        if(socket && task.pingData && (typeof socket.send == 'function')) {
+          write(socket, task, task.id, null, task.pingData);
+        }else if(socket && (typeof socket.ping == 'function')) {
+          socket.ping();
+        }else if(socket) {
+          write(socket, task, task.id);
+        }else{
+          clearInterval(interval);
+        }
+      }, task.pingInterval * 1000, task.id, socket);
+    }
     // As the `close` event is fired after the internal `_socket` is cleaned up
     // we need to do some hacky shit in order to tack the bytes send.
-    // 
-    // process.send({ type: 'showopened', opened: Object.keys(connections).length });
   });
 
   socket.on('message', function message(data) {
-    var send_data = {
-      type: 'message', latency: Date.now() - socket.last,
+    process_send({
+      type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
       id: task.id
-    };
-    // process.send(send_data);
-    metrics_datas.datas.push(send_data);
+    });
 
-    console.log('['+task.id.substr(task.id.indexOf('::'))+']socket on message@'+socket.last, "\n", data, "\n");
     // Only write as long as we are allowed to send messages
-    if (--task.messages && task.messages > 0) {
+    if (task.messages > 0)
+    if (--task.messages) {
       write(socket, task, task.id);
     } else {
-      // socket.close();
+      socket.close();
     }
   });
 
-  socket.on('close', function close(log) {
+  socket.on('close', function close() {
     var internal = socket._socket || {};
-    // console.info('['+task.id+']socket on close');
-    // console.log(socket);
 
-    var send_data = {
-      type: 'close', id: task.id,
+    process_send({
+      type: 'close', id: task.id, concurrent: --concurrent,
       read: internal.bytesRead || 0,
       send: internal.bytesWritten || 0
-    };
-    // process.send(send_data);
-    metrics_datas.datas.push(send_data);
+    });
 
-    if (inteval) {
-      clearInterval(inteval);
-    };
     delete connections[task.id];
-    // console.log('close ', Object.keys(connections).length);
-    if (Object.keys(connections) <= 0) {
-      // 一次性发送
-      process.send(metrics_datas);
-    };
+    checkConnectionLength(interval);
   });
 
   socket.on('error', function error(err) {
-    console.error('['+task.id+']socket on error-------', "\n", err, "\n", '-------error');
-    var send_data = { type: 'error', message: err.message, id: task.id };
-    // process.send(send_data);
-    metrics_datas.datas.push(send_data);
+    process_send({ type: 'error', message: err.message, id: task.id, concurrent: --concurrent });
 
     socket.close();
-    socket.emit('close');
     delete connections[task.id];
   });
 
   // Adding a new socket to our socket collection.
+  ++concurrent;
   connections[task.id] = socket;
 
   // timeout to close socket
   if (task.runtime && task.runtime > 0) {
     setTimeout(function timeoutToCloseSocket(id, socket) {
-      // console.log('timeout to close socket:'+id);
       socket.close();
     }, task.runtime * 1000, task.id, socket);
   }
 });
 
-process.on('SIGINT', function () {
-  // console.log('process.SIGINT')
-});
-process.on('exit', function () {
-  // console.log('process.exit')
-  // process.send(metrics_datas);
-});
+process.on('SIGINT', function () {});
+process.on('exit', function () {});
 
 /**
  * Helper function from writing messages to the socket.
@@ -155,21 +149,20 @@ process.on('exit', function () {
  * @param {Object} task The given task
  * @param {String} id
  * @param {Function} fn The callback
+ * @param {String} data
  * @api private
  */
-function write(socket, task, id, fn) {
-  var start = socket.last = Date.now();
-  console.info("\n" + 'no no no! no write please~! ' + "\n" + 'Do that if and only if u know the server can parse ur msg, or server will cut ur connection.' + "\n");
+function write(socket, task, id, fn, data) {
+  // i thank the generator doesn't make any sense, but just let me do some change and leave it alone
+  session[binary ? 'binary' : 'utf8'](data || task.size, function message(err, data) {
+    var start = socket.last = Date.now();
 
-  session[binary ? 'binary' : 'utf8'](task.size, function message(err, data) {
     socket.send(data, {
       binary: binary,
       mask: masked
     }, function sending(err) {
       if (err) {
-        var send_data = { type: 'error', message: err.message };
-        // process.send(send_data);
-        metrics_datas.datas.push(send_data);
+        process_send({ type: 'error', message: err.message, concurrent: --concurrent, id: id });
 
         socket.close();
         delete connections[id];

@@ -15,7 +15,7 @@ function Metrics(requests) {
   this.requests = requests;             // The total amount of requests send
 
   this.connections = 0;                 // Connections established
-  this.disconnections = 0;                 // Closed connections
+  this.disconnects = 0;                 // Closed connections
   this.failures = 0;                    // Connections that received an error
 
   this.errors = Object.create(null);    // Collection of different errors
@@ -138,7 +138,7 @@ Metrics.prototype.summary = function summary() {
   results.writeRow(['Online', this.timing.established + ' milliseconds']);
   results.writeRow(['Time taken', this.timing.duration + ' milliseconds']);
   results.writeRow(['Connected', this.connections]);
-  results.writeRow(['Disconnected', this.disconnections]);
+  results.writeRow(['Disconnected', this.disconnects]);
   results.writeRow(['Failed', this.failures]);
 
   results.writeRow(['Total transferred', this.send.bytes(2)]);

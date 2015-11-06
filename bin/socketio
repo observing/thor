@@ -14,11 +14,10 @@ var cli = require('commander');
 cli.usage('[options] ws://localhost[@@vip]')
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
    .option('-C, --concurrent <connections>[deprecated]', 'how many concurrent-connections per second', parseInt, 0)
-   .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
+   .option('-M, --messages <messages>', 'number of messages to be send per connection', parseInt, 0)
    .option('-P, --protocol <protocol>', 'WebSocket protocol version', parseInt, 13)
    .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
    .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
-   .option('-G, --generator <file>', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
    .option('-T, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited and u must stop by ctrl+c', parseInt, -1)
@@ -30,8 +29,7 @@ cli.usage('[options] ws://localhost[@@vip]')
 // should bail out
 //
 if (!cli.args.length) return [
-    'Thor:'
-  , 'Odin is disapointed you... pithy human! You forgot to supply the urls.'
+    '愚かな人類よ! You forgot to supply the urls.'
 ].forEach(function stderr(line) {
   console.error(line);
 });
@@ -44,18 +42,16 @@ var cluster = require('cluster')
   , worker_num = worker_num > cli.amount * cli.args.length ? cli.amount * cli.args.length : worker_num
   , forked_worker_num = worker_num
   , connect_ids = Object.create(null)
-  , connections = 0
-  , connecteds = {}
-  , received = 0
-  , robin = [];
+  , connections = 0 // connected connections number of all worker
+  , worker_connections = {} // connected connections number of each worker
+  , received = 0 // total message received from server in all workers
+  , robin = []; // array store workers
 
 cluster.setupMaster({
     exec: path.resolve(__dirname, '../worker-socketio.js')
   , silent: false
   , args: [
-      cli.generator
-      ? path.resolve(process.cwd(), cli.generator)
-      : path.resolve(__dirname, '../generator.js'),
+      false,
       cli.protocol,
       !!cli.masked,
       !!cli.binary
@@ -80,13 +76,13 @@ Object.keys(cluster.workers).forEach(function each(id) {
 
     switch (data.type) {
       case 'connected':
-        connecteds[data.worker_id] = data.connected;
+        worker_connections[data.worker_id] = data.connected;
         var all_connected = 0,
             all_workers = 0;
-        Object.keys(connecteds).forEach(function each(id) {
+        Object.keys(worker_connections).forEach(function each(id) {
           all_workers++;
-          all_connected += connecteds[id];
-          console.log('[Master] %s connected, msg received %s in workers %s', connecteds[id], data.received_msg, id);
+          all_connected += worker_connections[id];
+          console.log('[Master] %s connected, msg received %s in workers %s', worker_connections[id], data.msg_received, id);
         });
         // Output the connection progress
         console.log('[Master] %s connected, in %s workers' + "\n", all_connected, all_workers);
@@ -148,26 +144,6 @@ Object.keys(cluster.workers).forEach(function each(id) {
 });
 
 //
-// Up our WebSocket socket connections.
-//
-[
-    ''
-  , 'Thor:                                                  version: '+ cli._version
-  , ''
-  , 'God of Thunder, son of Odin and smasher of WebSockets!'
-  , ''
-  , 'Thou shall:'
-  , '- Spawn '+ forked_worker_num +' workers.'
-  , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
-  , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
-  , ''
-  , 'The answers you seek shall be yours, once I claim what is mine.'
-  , ''
-].forEach(function stdout(line) {
-  console.log(line);
-});
-
-//
 // Metrics collection.
 //
 var metrics = new Metrics(cli.amount * cli.args.length);
@@ -226,7 +202,27 @@ process.on('SIGINT', function end() {
 });
 
 process.on('exit', function summary() {
-  console.log('-----------------');
+  console.log('-------------------------------------');
+
+//
+// Up our WebSocket socket connections.
+//
+[
+    ''
+  , 'Thor:                                                  version: '+ cli._version
+  , ''
+  , 'God of Thunder, son of Odin and smasher of WebSockets!'
+  , ''
+  , 'Thou shall:'
+  , '- Spawn '+ forked_worker_num +' workers.'
+  , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
+  , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
+  , ''
+  , 'The answers you seek shall be yours, once I claim what is mine.'
+  , ''
+].forEach(function stdout(line) {
+  console.log(line);
+});
 
   metrics.established().stop().summary();
 });

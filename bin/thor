@@ -2,6 +2,7 @@
 'use strict';
 
 var Metrics = require('../metrics')
+  , colors = require('colors')
   , async = require('async')
   , path = require('path')
   , os = require('os');
@@ -14,14 +15,17 @@ var cli = require('commander');
 cli.usage('[options] ws://localhost')
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
    .option('-C, --concurrent <connections>[deprecated]', 'how many concurrent-connections per second', parseInt, 0)
-   .option('-M, --messages <messages>', 'messages to be send per connection', parseInt, 0)
+   .option('-M, --messages <messages>', 'number of messages to be send per connection', parseInt, 0)
    .option('-P, --protocol <protocol>', 'WebSocket protocol version', parseInt, 13)
    .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
    .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
    .option('-G, --generator <file>', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('-T, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
+   .option('-PT, --pingInterval', 'seconds for doing ping to keep-alive', parseInt, 25)
+   .option('-PD, --pingData <data>', 'specify ping data to be send to the server')
+   .option('-RS, --realtimeStat', 'worker will send stat info to master in realtime')
+   .option('-RT, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
    .version(require('../package.json').version)
    .parse(process.argv);
 
@@ -31,7 +35,7 @@ cli.usage('[options] ws://localhost')
 //
 if (!cli.args.length) return [
     'Thor:'
-  , 'Odin is disapointed you... pithy human! You forgot to supply the urls.'
+  , 'Odin is disappointed in you... pity human! You forgot to supply the urls.'
 ].forEach(function stderr(line) {
   console.error(line);
 });
@@ -42,6 +46,7 @@ if (!cli.args.length) return [
 var cluster = require('cluster')
   , workers = cli.workers || 1
   , ids = Object.create(null)
+  , concurrents = Object.create(null)
   , connections = 0
   , received = 0
   , robin = [];
@@ -66,7 +71,6 @@ Object.keys(cluster.workers).forEach(function each(id) {
 
   worker.on('message', function message(data) {
   
-  // console.info('catch worker message ' + (data.datas.length));
   var datas = [];
   if (data.collection) {
     datas = data.datas;
@@ -75,48 +79,32 @@ Object.keys(cluster.workers).forEach(function each(id) {
   }
   for (var i = 0; i < datas.length; i++) {
     var data = datas[i];
+    if ('concurrent' in data) concurrents[data.id] = data.concurrent;
 
     switch (data.type) {
-      case 'opened':
-        worker.emit('opened::'+ data.id);
-
-        // Output the connection progress
-        if (++connections % 100 === 0) {
-          console.log('  Opened %s connections', connections);
-        }
-
-        break;
-
       case 'open':
         metrics.handshaken(data);
-        // worker.emit('open::'+ data.id);
+        worker.emit('open::'+ data.id);
 
         // Output the connection progress
-        /*if (++connections % 1000 === 0) {
-          console.log('  Opened %s connections', connections);
-        }*/
-
+        ++connections;
         break;
 
       case 'close':
         delete ids[data.id];
 
         metrics.close(data);
-        // worker.emit('close::'+ data.id);
         break;
 
       case 'error':
         delete ids[data.id];
 
         metrics.error(data);
-        // worker.emit('error::'+ data.id);
         break;
 
       case 'message':
         received++;
         metrics.message(data);
-        // worker.emit('message::'+ data.id);
-
     }
 
   }
@@ -131,6 +119,52 @@ Object.keys(cluster.workers).forEach(function each(id) {
   // across the different workers that we spawned.
   robin.push(worker);
 });
+
+//
+// Output live, real-time stats.
+//
+function live() {
+  var frames = live.frames
+    , len = frames.length
+    , interval = 100
+    , i = 0;
+
+  live.interval = setInterval(function tick() {
+    var active = Object.keys(concurrents).reduce(function (count, id) {
+      return count + (concurrents[id] || 0);
+    }, 0);
+
+    process.stdout.write('\r'+ frames[i++ % len] +' Progress :: '.white + [
+      'Created '.white + connections.toString().green,
+      'Active '.white + active.toString().green
+    ].join(', '));
+  }, interval);
+}
+
+/**
+ * Live frames.
+ *
+ * @type {Array}
+ * @api private
+ */
+live.frames = [
+    '  \u001b[96m◜ \u001b[90m'
+  , '  \u001b[96m◠ \u001b[90m'
+  , '  \u001b[96m◝ \u001b[90m'
+  , '  \u001b[96m◞ \u001b[90m'
+  , '  \u001b[96m◡ \u001b[90m'
+  , '  \u001b[96m◟ \u001b[90m'
+];
+
+/**
+ * Stop the live stats from running.
+ *
+ * @api private
+ */
+live.stop = function stop() {
+  process.stdout.write('\u001b[2K');
+  clearInterval(live.interval);
+};
 
 //
 // Up our WebSocket socket connections.
@@ -179,13 +213,19 @@ async.forEach(cli.args, function forEach(url, done) {
     ids[id] = 1;
 
     // Process the connections
-    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id, runtime: cli.runtime, localaddr: localaddr, send_opened: (cli.concurrent && cli.concurrent < cli.amount) });
+    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id
+      , localaddr: localaddr
+      , pingInterval: cli.pingInterval
+      , pingData: cli.pingData
+      , openedStat: (cli.concurrent && cli.concurrent < cli.amount)
+      , realtimeStat: cli.realtimeStat 
+      , runtime: cli.runtime
+    });
 
     // do it if cuncurrent is not 0 and smaller than the amount of all tcp connections
     if (cli.concurrent && cli.concurrent < cli.amount) {
-      worker.once('opened::'+ id, fn);
+      worker.once('open::'+ id, fn);
     };
-    // worker.once('open::'+ id, fn);
 
     // Add the worker back at the end of the round robin queue.
     robin.push(worker);
@@ -200,43 +240,20 @@ async.forEach(cli.args, function forEach(url, done) {
   metrics.established();
 });
 
+//
+// We are setup, everything is running
+//
 console.log('');
-// console.log("worker num:"+robin.length);
+live();
 
-process.on('SIGINT', function end() {
+process.once('SIGINT', function end() {
   robin.forEach(function nuke(worker) {
     try { worker.send({ shutdown: true }); }
     catch (e) {}
-  })
+  });
 });
 
-process.on('exit', function summary() {
-  console.log('-----------------');
-/*
-//
-// Up our WebSocket socket connections.
-//
-[
-    ''
-  , 'Thor:                                                  version: '+ cli._version
-  , ''
-  , 'God of Thunder, son of Odin and smasher of WebSockets!'
-  , ''
-  , 'Thou shall:'
-  , '- Spawn '+ cli.workers +' workers.'
-  , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
-  , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
-  , ''
-  , 'The answers you seek shall be yours, once I claim what is mine.'
-  , ''
-].forEach(function stdout(line) {
-  console.log(line);
-});
-*/
-  // console.log('---------process exit in 2 seconds--------');
-  /*setTimeout(function () {
-    console.log('');
-    metrics.established().stop().summary();
-  }, 3000);*/
+process.once('exit', function summary() {
+  live.stop();
   metrics.established().stop().summary();
 });

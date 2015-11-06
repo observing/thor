@@ -17,7 +17,7 @@ Once you have Node.js installed, you can use the bundled package manager `npm` t
 install this module:
 
 ```
-npm install -g https://github.com/iorichina/thor.git
+npm install -g git://github.com/iorichina/thor.git
 ```
 
 The `-g` command flag tells `npm` to install the module globally on your system.
@@ -26,6 +26,7 @@ The `-g` command flag tells `npm` to install the module globally on your system.
 
 ```
 thor [options] <urls>
+socketio [options] <url>[@@vip] [<url>[@@vip]...]
 ```
 
 Thor can hit multiple URL's at once; this is useful if you are testing your
@@ -35,6 +36,10 @@ using the `ws` or `wss` protocols:
 
 ```
 thor --amount 5000 ws://localhost:8080 wss://localhost:8081
+```
+or use http/https if and only if ur using socket.io(nodejs/java/etc) in server
+```
+socketio --amount 5000 http://localhost:8080 https://localhost:8081
 ```
 
 The snippet above will open up `5000` connections against the regular
@@ -46,7 +51,10 @@ descriptors on your local machine if you start testing WebSockets. Set the
 `ulimit -n` on machine as high as possible. If you do not know how to do this,
 Google it.
 
-#### Options
+And the other thing u have to know is that, one ip can only create max to 60 thousands connections,
+which is limited by TCP/IP protocal. U can special the [@@one_of_the_machine_vip] after the url.
+
+#### thor Options
 
 ```
   Usage: thor [options] ws://localhost
@@ -56,13 +64,14 @@ Google it.
     -h, --help                      output usage information
     -A, --amount <connections>      the amount of persistent connections to generate
     -C, --concurrent <connections>  how many concurrent-connections per second
-    -M, --messages <messages>       messages to be send per connection
+    -M, --messages <messages>       number of messages to be send per connection
     -P, --protocol <protocol>       WebSocket protocol version
     -B, --buffer <size>             size of the messages that are send
     -W, --workers <cpus>            workers to be spawned
     -G, --generator <file>          custom message generators
     -M, --masked                    send the messaged with a mask
     -b, --binary                    send binary messages instead of utf-8
+    -T, --runtime <seconds>         timeout to close socket(seconds), default to unlimited and u must stop by ctrl+c
     -V, --version                   output the version number
 ```
 
@@ -74,6 +83,27 @@ Some small notes about the options:
 - `--buffer` should be size of the message in bytes.
 - `--workers` as Node.js is single threaded this sets the amount of sub
   processes to handle all the heavy lifting.
+
+#### socketio Options
+
+```
+  Usage: socketio [options] http[s]://localhost[@@vip]
+
+  Options:
+
+    -h, --help                                  output usage information
+    -A, --amount <connections>                  the amount of persistent connections to generate
+    -C, --concurrent <connections>[deprecated]  how many concurrent-connections per second
+    -M, --messages <messages>                   number of messages to be send per connection
+    -P, --protocol <protocol>                   WebSocket protocol version
+    -B, --buffer <size>                         size of the messages that are send
+    -W, --workers <cpus>                        workers to be spawned
+    -M, --masked                                send the messaged with a mask
+    -b, --binary                                send binary messages instead of utf-8
+    -T, --runtime <seconds>                     timeout to close socket(seconds), default to unlimited and u must stop by ctrl+c
+    -V, --version                               output the version number
+```
+
 
 ### Custom messages
 

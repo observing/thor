@@ -3,19 +3,24 @@
 var Socket = require('socket.io-client')
   , connections = {}
   , connected = 0
-  , received_msg = 0;
-
-//
-// Get the session document that is used to generate the data.
-//
-var session = require(process.argv[2]);
+  , msg_received = 0;
 
 // 收集后一次性send给master
 var metrics_datas = {collection:true, datas:[]};
 
 var sendToMaster = setInterval(function () {
-  process.send({ type: 'connected', connected: connected, received_msg: received_msg, worker_id: process.pid });
-}, 60000);
+      process.send({ type: 'connected', connected: connected, msg_received: msg_received, worker_id: process.pid });
+    }, 60000)
+  , checkConnectionLength = function(){
+    if (Object.keys(connections).length <= 0) {
+      // 一次性发送
+      process.send(metrics_datas, null, function clearDatas(err){
+        // invoked after the message is sent but before the target may have received it
+        if (err) {return;};
+        metrics_datas.datas = [];
+      });
+    };
+  };
 
 process.on('message', function message(task) {
   var now = Date.now();
@@ -64,11 +69,8 @@ process.on('message', function message(task) {
     // write(socket, task, task.id);
     // 
     if (task.send_opened) {
-      process.send({ type: 'opened', duration: Date.now() - now, id: task.id });
+      process.send(send_data);
     };
-    /*if (connected % 1000 === 0) {
-      console.info('worker ', process.pid, ' has connection: ', connected);
-    };*/
     
     // As the `close` event is fired after the internal `_socket` is cleaned up
     // we need to do some hacky shit in order to tack the bytes send.
@@ -82,7 +84,7 @@ process.on('message', function message(task) {
     // process.send(send_data);
     metrics_datas.datas.push(send_data);
 
-    received_msg++;
+    msg_received++;
     // console.log('['+task.id.substr(task.id.indexOf('::'))+']socket on message@'+socket.last, "\n", data, "\n");
     // Only write as long as we are allowed to send messages
     if (--task.messages && task.messages > 0) {
@@ -97,8 +99,11 @@ process.on('message', function message(task) {
   socket.on('disconnect', function close() {
     connected--;
     var internal = {};
-    // console.log(socket);
-    // var internal = socket.io.engine._socket || {};
+    try{
+      internal = socket.io.engine.transport.ws._socket || {};
+    }catch(e){
+      internal = {};
+    }
     // console.info('['+task.id+']socket on close');
 
     var send_data = {
