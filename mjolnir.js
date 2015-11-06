@@ -88,13 +88,15 @@ process.on('message', function message(task) {
     if (task.pingInterval && task.pingInterval > 0) {
       pingInterval = setInterval(function ping(id, socket) {
         if(socket){
-          if(task.serverEngine && task.serverEngine in ['socket.io','engine.io','netty-socketio']) {
-            socket.ping('2');
+          if(task.serverEngine && -1 != ['socket.io','engine.io','netty-socketio'].indexOf(task.serverEngine)) {
+            socket.send('2');
           }else{
             socket.ping();
           }
         }else{
+          delete connections[task.id];
           clearInterval(pingInterval);
+          checkConnectionLength();
         }
       }, task.pingInterval * 1000, task.id, socket);
     }
