@@ -14,8 +14,8 @@ var cli = require('commander');
 
 cli.usage(['[options] urls',
     ,'         urls like'
-    ,'         ws://host/path/?params http://host/socket.io/?transport=websocket'
-    ,'         ws://host/path/?params@@192.168.102.33 http://host/socket.io/?transport=websocket@@192.168.102.53'].join("\n"))
+    ,'         ws://host/path/?params ws://host/socket.io/?transport=websocket'
+    ,'         ws://host/path/?params@@192.168.102.33 ws://host/socket.io/?transport=websocket@@192.168.102.53'].join("\n"))
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate, default 10000', parseInt, 10000)
    .option('-C, --concurrent [connections]', '[deprecated]how many concurrent-connections per second, default 0', parseInt, 0)
    .option('-M, --messages [messages]', 'number of messages to be send per connection, default 0', parseInt, 0)
@@ -25,8 +25,8 @@ cli.usage(['[options] urls',
    .option('-G, --generator [file]', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
    .option('--SE, --serverEngine [engine]', '"socket.io"/"engine.io"(nodejs), "netty-socketio"(java) must be specified')
+   .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
    .option('--RS, --realtimeStat', 'worker will send stat info to master in realtime')
    .option('--SI, --statInterval [seconds]', 'show stat info interval, default 60', parseInt, 60)
    .option('--RT, --runtime [seconds]', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)

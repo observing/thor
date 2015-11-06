@@ -67,7 +67,7 @@ process.on('message', function message(task) {
   //
   if (task.shutdown) {
     Object.keys(connections).forEach(function shutdown(id) {
-      connections[id].close();
+      connections[id] && connections[id].close();
     });
   }
 
@@ -138,6 +138,7 @@ process.on('message', function message(task) {
 
     socket.close();
     delete connections[task.id];
+    checkConnectionLength();
   });
 
   // Adding a new socket to our socket collection.

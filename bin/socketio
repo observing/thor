@@ -2,6 +2,7 @@
 'use strict';
 
 var Metrics = require('../metrics')
+  , colors = require('colors')
   , async = require('async')
   , path = require('path')
   , os = require('os');
@@ -11,25 +12,34 @@ var Metrics = require('../metrics')
 //
 var cli = require('commander');
 
-cli.usage('[options] ws://localhost[@@vip]')
-   .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
-   .option('-C, --concurrent <connections>[deprecated]', 'how many concurrent-connections per second', parseInt, 0)
-   .option('-M, --messages <messages>', 'number of messages to be send per connection', parseInt, 0)
-   .option('-P, --protocol <protocol>', 'WebSocket protocol version', parseInt, 13)
-   .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
-   .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
+cli.usage(['[options] urls',
+    ,'         urls like'
+    ,'         http://host/socket.io/?transport=websocket'
+    ,'         http://host/socket.io/?transport=websocket@@192.168.102.53'].join("\n"))
+   .option('-A, --amount <connections>', 'the amount of persistent connections to generate, default 10000', parseInt, 10000)
+   .option('-C, --concurrent [connections]', '[deprecated]how many concurrent-connections per second, default 0', parseInt, 0)
+   .option('-M, --messages [messages]', 'number of messages to be send per connection, default 0', parseInt, 0)
+   .option('-P, --protocol [protocol]', 'WebSocket protocol version, default 13', parseInt, 13)
+   .option('-B, --buffer [size]', 'size of the messages that are send, default 1024', parseInt, 1024)
+   .option('-W, --workers [cpus]', 'workers to be spawned, default cpus.length', parseInt, os.cpus().length)
+   .option('-G, --generator [file]', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('-T, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited and u must stop by ctrl+c', parseInt, -1)
+   .option('--TP, --transport [transport]', '"polling"/"websocket" must be specified', null, 'websocket')
+   .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
+   .option('--RS, --realtimeStat', 'worker will send stat info to master in realtime')
+   .option('--SI, --statInterval [seconds]', 'show stat info interval, default 60', parseInt, 60)
+   .option('--RT, --runtime [seconds]', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
    .version(require('../package.json').version)
    .parse(process.argv);
+
 
 //
 // Check if all required arguments are supplied, if we don't have a valid url we
 // should bail out
 //
 if (!cli.args.length) return [
-    '愚かな人類よ! You forgot to supply the urls.'
+    '愚かな人類よ! You forgot to supply the urls. Type -h for help.'
 ].forEach(function stderr(line) {
   console.error(line);
 });
@@ -38,27 +48,30 @@ if (!cli.args.length) return [
 // By Odin's beard, unleash thunder!
 //
 var cluster = require('cluster')
-  , worker_num = cli.workers || 1
-  , worker_num = worker_num > cli.amount * cli.args.length ? cli.amount * cli.args.length : worker_num
-  , forked_worker_num = worker_num
-  , connect_ids = Object.create(null)
-  , connections = 0 // connected connections number of all worker
-  , worker_connections = {} // connected connections number of each worker
-  , received = 0 // total message received from server in all workers
-  , robin = []; // array store workers
+  , workers = cli.workers || 1
+  , ids = Object.create(null)
+  , concurrents = Object.create(null)
+  , connections = 0
+  , received = 0
+  , robin = []
+  , workers = Math.min(cli.amount * cli.args.length, workers)
+  , forked_workers = workers;
 
 cluster.setupMaster({
     exec: path.resolve(__dirname, '../worker-socketio.js')
   , silent: false
   , args: [
-      false,
+      cli.generator
+      ? path.resolve(process.cwd(), cli.generator)
+      : path.resolve(__dirname, '../generator.js'),
       cli.protocol,
       !!cli.masked,
-      !!cli.binary
+      !!cli.binary,
+      cli.statInterval
     ]
 });
 
-while (worker_num--) cluster.fork();
+while (workers--) cluster.fork();
 
 Object.keys(cluster.workers).forEach(function each(id) {
   var worker = cluster.workers[id];
@@ -73,61 +86,32 @@ Object.keys(cluster.workers).forEach(function each(id) {
   }
   for (var i = 0; i < datas.length; i++) {
     var data = datas[i];
+    if ('concurrent' in data) concurrents[data.id] = data.concurrent;
 
     switch (data.type) {
-      case 'connected':
-        worker_connections[data.worker_id] = data.connected;
-        var all_connected = 0,
-            all_workers = 0;
-        Object.keys(worker_connections).forEach(function each(id) {
-          all_workers++;
-          all_connected += worker_connections[id];
-          console.log('[Master] %s connected, msg received %s in workers %s', worker_connections[id], data.msg_received, id);
-        });
-        // Output the connection progress
-        console.log('[Master] %s connected, in %s workers' + "\n", all_connected, all_workers);
-        break;
-
-      case 'opened':
-        worker.emit('opened::'+ data.id);
-
-        // Output the connection progress
-        if (++connections % 100 === 0) {
-          console.log('  Opened %s connections', connections);
-        }
-
-        break;
-
       case 'open':
         metrics.handshaken(data);
-        // worker.emit('open::'+ data.id);
+        worker.emit('open::'+ data.id);
 
         // Output the connection progress
-        /*if (++connections % 1000 === 0) {
-          console.log('  Opened %s connections', connections);
-        }*/
-
+        ++connections;
         break;
 
       case 'close':
-        delete connect_ids[data.id];
+        delete ids[data.id];
 
         metrics.close(data);
-        // worker.emit('close::'+ data.id);
         break;
 
       case 'error':
-        delete connect_ids[data.id];
+        delete ids[data.id];
 
         metrics.error(data);
-        // worker.emit('error::'+ data.id);
         break;
 
       case 'message':
         received++;
         metrics.message(data);
-        // worker.emit('message::'+ data.id);
-
     }
 
   }
@@ -135,7 +119,7 @@ Object.keys(cluster.workers).forEach(function each(id) {
     //
     // Check if we have processed all connections so we can quit cleanly.
     //
-    if (!Object.keys(connect_ids).length) process.exit();
+    if (!Object.keys(ids).length) process.exit();
   });
 
   // Add our worker to our round robin queue so we can balance all our requests
@@ -144,65 +128,51 @@ Object.keys(cluster.workers).forEach(function each(id) {
 });
 
 //
-// Metrics collection.
+// Output live, real-time stats.
 //
-var metrics = new Metrics(cli.amount * cli.args.length);
+function live() {
+  var frames = live.frames
+    , len = frames.length
+    , interval = cli.statInterval * 1000
+    , i = 0;
 
-// Iterate over all the urls so we can target multiple locations at once, which
-// is helpfull if you are testing multiple loadbalancer endpoints for example.
-async.forEach(cli.args, function forEach(url, done) {
-  var i = cli.amount
-    , completed = 0;
+  live.interval = setInterval(function tick() {
+    var active = Object.keys(concurrents).reduce(function (count, id) {
+      return count + (concurrents[id] || 0);
+    }, 0);
 
-  console.log('Connecting to %s', url);
+    process.stdout.write('\r'+ frames[i++ % len] +' Progress :: '.white + [
+      'Created '.white + connections.toString().green,
+      'Active '.white + active.toString().green,
+      '@'.white + new Date().toLocaleString().green
+    ].join(', '));
+  }, interval);
+}
 
-  url = url.split('@@');
-  var localaddr = url.length > 1 ? url[1] : null;
-  url = url[0];
-  //
-  // Create a simple WebSocket connection generator.
-  //
-  var queue = async.queue(function working(connect_id, fn) {
-    var worker = robin.shift();
+/**
+ * Live frames.
+ *
+ * @type {Array}
+ * @api private
+ */
+live.frames = [
+    '  \u001b[96m◜ \u001b[90m'
+  , '  \u001b[96m◠ \u001b[90m'
+  , '  \u001b[96m◝ \u001b[90m'
+  , '  \u001b[96m◞ \u001b[90m'
+  , '  \u001b[96m◡ \u001b[90m'
+  , '  \u001b[96m◟ \u001b[90m'
+];
 
-    // Register the id, so we can keep track of the connections that we still
-    // need to process.
-    connect_ids[connect_id] = 1;
-
-    // Process the connections
-    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: connect_id, runtime: cli.runtime, localaddr: localaddr, send_opened: (cli.concurrent && cli.concurrent < cli.amount) });
-
-    // do it if cuncurrent is not 0 and smaller than the amount of all tcp connections
-    // we have to set this event to roll process to next connect
-    if (cli.concurrent && cli.concurrent < cli.amount) {
-      worker.once('opened::'+ connect_id, fn);
-    };
-
-    // Add the worker back at the end of the round robin queue.
-    robin.push(worker);
-  }, cli.concurrent || Infinity);
-
-  // When all the events are processed successfully we should call.. back ;P
-  queue.drain = done;
-
-  // Add all connections to the processing queue; //.push(connect_id)
-  while (i--) queue.push(url + (localaddr ? '::'+localaddr : '') +'::'+ i);
-}, function established(err) {
-  metrics.established();
-});
-
-console.log('');
-
-// ctrl + c
-process.on('SIGINT', function end() {
-  robin.forEach(function nuke(worker) {
-    try { worker.send({ shutdown: true }); }
-    catch (e) {}
-  })
-});
-
-process.on('exit', function summary() {
-  console.log('-------------------------------------');
+/**
+ * Stop the live stats from running.
+ *
+ * @api private
+ */
+live.stop = function stop() {
+  process.stdout.write('\u001b[2K');
+  clearInterval(live.interval);
+};
 
 //
 // Up our WebSocket socket connections.
@@ -214,7 +184,7 @@ process.on('exit', function summary() {
   , 'God of Thunder, son of Odin and smasher of WebSockets!'
   , ''
   , 'Thou shall:'
-  , '- Spawn '+ forked_worker_num +' workers.'
+  , '- Spawn '+ forked_workers +' workers.'
   , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
   , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
@@ -224,5 +194,75 @@ process.on('exit', function summary() {
   console.log(line);
 });
 
+//
+// Metrics collection.
+//
+var metrics = new Metrics(cli.amount * cli.args.length);
+
+// Iterate over all the urls so we can target multiple locations at once, which
+// is helpfull if you are testing multiple loadbalancer endpoints for example.
+async.forEach(cli.args, function forEach(url, done) {
+  var i = cli.amount
+    , completed = 0
+    , goOnTaskQueueWhenConcurrentLimited = (cli.concurrent && cli.concurrent < cli.amount);
+
+  console.log('Connecting to %s', url);
+
+  url = url.split('@@');
+  var localaddr = url.length > 1 ? url[1] : null;
+  url = url[0];
+  //
+  // Create a simple WebSocket connection generator.
+  //
+  var queue = async.queue(function working(id, fn) {
+    var worker = robin.shift();
+
+    // Register the id, so we can keep track of the connections that we still
+    // need to process.
+    ids[id] = 1;
+
+    // Process the connections
+    worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id
+      , localaddr: localaddr
+      , pingInterval: cli.pingInterval
+      , serverEngine: cli.serverEngine
+      , nextTask: goOnTaskQueueWhenConcurrentLimited
+      , realtimeStat: cli.realtimeStat 
+      , runtime: cli.runtime
+    });
+
+    // do it if cuncurrent is not 0 and smaller than the amount of all tcp connections
+    if (goOnTaskQueueWhenConcurrentLimited) {
+      worker.once('open::'+ id, fn);
+    };
+
+    // Add the worker back at the end of the round robin queue.
+    robin.push(worker);
+  }, cli.concurrent || Infinity);
+
+  // When all the events are processed successfully we should call.. back ;P
+  queue.drain = done;
+
+  // Add all connections to the processing queue;
+  while (i--) queue.push(url + (localaddr ? '::'+localaddr : '') +'::'+ i);
+}, function established(err) {
+  metrics.established();
+});
+
+//
+// We are setup, everything is running
+//
+console.log('');
+live();
+
+process.once('SIGINT', function end() {
+  robin.forEach(function nuke(worker) {
+    try { worker.send({ shutdown: true }); }
+    catch (e) {}
+  });
+});
+
+process.once('exit', function summary() {
+  live.stop();
   metrics.established().stop().summary();
 });
