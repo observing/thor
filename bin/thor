@@ -224,8 +224,8 @@ async.forEach(cli.args, function forEach(url, done) {
     // Process the connections
     worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id
       , localaddr: localaddr
-      , pingInterval: cli.pingInterval
       , serverEngine: cli.serverEngine
+      , pingInterval: cli.pingInterval
       , nextTask: goOnTaskQueueWhenConcurrentLimited
       , realtimeStat: cli.realtimeStat 
       , runtime: cli.runtime

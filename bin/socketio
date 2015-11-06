@@ -25,7 +25,7 @@ cli.usage(['[options] urls',
    .option('-G, --generator [file]', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('--TP, --transport [transport]', '"polling"/"websocket" must be specified', null, 'websocket')
+   .option('--TP, --transport [transport]', '"polling"/"websocket" must be specified', 'websocket')
    .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
    .option('--RS, --realtimeStat', 'worker will send stat info to master in realtime')
    .option('--SI, --statInterval [seconds]', 'show stat info interval, default 60', parseInt, 60)
@@ -224,8 +224,8 @@ async.forEach(cli.args, function forEach(url, done) {
     // Process the connections
     worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id
       , localaddr: localaddr
+      , transport: cli.transport
       , pingInterval: cli.pingInterval
-      , serverEngine: cli.serverEngine
       , nextTask: goOnTaskQueueWhenConcurrentLimited
       , realtimeStat: cli.realtimeStat 
       , runtime: cli.runtime

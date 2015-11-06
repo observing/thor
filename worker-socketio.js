@@ -73,12 +73,11 @@ process.on('message', function message(task) {
 
   // End of the line, we are gonna start generating new connections.
   if (!task.url) return;
-
   var socket = new Socket(task.url, {
     'force new connection': true,
     reconnection: false,
     timeout: 5000,
-    transports: ['polling'],
+    transports: [task.transport],
     protocolVersion: protocol,
     localAddress: task.localaddr || null
   });
@@ -153,7 +152,7 @@ process.on('message', function message(task) {
 
   // catch ECONNREFUSED
   socket.io.on('connect_error', function(err){
-    process_send({ type: 'error', message: err.description.message, id: task.id, concurrent: --concurrent }, task);
+    process_send({ type: 'error', message: err.description ? err.description.message : err.message, id: task.id, concurrent: --concurrent }, task);
 
     socket.disconnect();
     socket.emit('disconnect');
