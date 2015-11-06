@@ -16,29 +16,39 @@ var masked = process.argv[4] === 'true'
   , binary = process.argv[5] === 'true'
   , protocol = +process.argv[3] || 13;
 
-// 收集后一次性send给master
+// collect metics datas
 var metrics_datas = {collection:true, datas:[]}
   , process_send = function(data, task) {
-      if (task.realtimeStat || ('open' == data.type && task.openedStat)) {
+      if (task.realtimeStat || ('open' == data.type && task.nextTask)) {
         process.send(data);
       }else{
         metrics_datas.datas.push(data);
       }
     }
-  , checkConnectionLength = function(interval){
-      if (Object.keys(connections).length <= 0) {
-        if (interval) {
-          clearInterval(interval);
-        };
-        // 一次性发送
-        process.send(metrics_datas, null, function clearDatas(err){
-          // invoked after the message is sent but before the target may have received it
-          if (err) {return;};
-          // WARNING: maybe we should use synchronize method here
-          metrics_datas.datas = [];
-        });
+  , process_sendAll = function(end) {
+      if (metrics_datas.datas.length <= 0) {
+        return;
       };
-    };
+      // send all data to parent
+      process.send(metrics_datas, null, function clearDatas(err){
+        // invoked after the message is sent but before the target may have received it
+        if (err) {return;}
+        // WARNING: maybe we should use synchronize method here
+        metrics_datas.datas = [];
+        if (end) {
+          process.exit();
+        };
+      });
+    }
+  , checkConnectionLength = function(){
+      if (Object.keys(connections).length <= 0) {
+        process_sendAll(true);
+      }
+    }
+  , statInterval = +process.argv[6] || 60
+  , workerStatInterval = setInterval(function () {
+      process_sendAll();
+    }, statInterval * 1000);
 
 process.on('message', function message(task) {
   var now = Date.now();
@@ -69,22 +79,22 @@ process.on('message', function message(task) {
     localAddress: task.localaddr || null
   });
   socket.last = Date.now();
-  var interval = null;
+  var pingInterval = null;
 
   socket.on('open', function open() {
-    process_send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent });
+    process_send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent }, task);
     // write(socket, task, task.id);
 
     if (task.pingInterval && task.pingInterval > 0) {
-      interval = setInterval(function ping(id, socket) {
-        if(socket && task.pingData && (typeof socket.send == 'function')) {
-          write(socket, task, task.id, null, task.pingData);
-        }else if(socket && (typeof socket.ping == 'function')) {
-          socket.ping();
-        }else if(socket) {
-          write(socket, task, task.id);
+      pingInterval = setInterval(function ping(id, socket) {
+        if(socket){
+          if(task.serverEngine && task.serverEngine in ['socket.io','engine.io','netty-socketio']) {
+            socket.ping('2');
+          }else{
+            socket.ping();
+          }
         }else{
-          clearInterval(interval);
+          clearInterval(pingInterval);
         }
       }, task.pingInterval * 1000, task.id, socket);
     }
@@ -96,7 +106,7 @@ process.on('message', function message(task) {
     process_send({
       type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
       id: task.id
-    });
+    }, task);
 
     // Only write as long as we are allowed to send messages
     if (task.messages > 0)
@@ -114,14 +124,15 @@ process.on('message', function message(task) {
       type: 'close', id: task.id, concurrent: --concurrent,
       read: internal.bytesRead || 0,
       send: internal.bytesWritten || 0
-    });
+    }, task);
 
     delete connections[task.id];
-    checkConnectionLength(interval);
+    clearInterval(pingInterval);
+    checkConnectionLength();
   });
 
   socket.on('error', function error(err) {
-    process_send({ type: 'error', message: err.message, id: task.id, concurrent: --concurrent });
+    process_send({ type: 'error', message: err.message, id: task.id, concurrent: --concurrent }, task);
 
     socket.close();
     delete connections[task.id];
@@ -162,7 +173,7 @@ function write(socket, task, id, fn, data) {
       mask: masked
     }, function sending(err) {
       if (err) {
-        process_send({ type: 'error', message: err.message, concurrent: --concurrent, id: id });
+        process_send({ type: 'error', message: err.message, concurrent: --concurrent, id: id }, task);
 
         socket.close();
         delete connections[id];

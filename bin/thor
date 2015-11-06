@@ -12,30 +12,34 @@ var Metrics = require('../metrics')
 //
 var cli = require('commander');
 
-cli.usage('[options] ws://localhost')
-   .option('-A, --amount <connections>', 'the amount of persistent connections to generate', parseInt, 10000)
-   .option('-C, --concurrent <connections>[deprecated]', 'how many concurrent-connections per second', parseInt, 0)
-   .option('-M, --messages <messages>', 'number of messages to be send per connection', parseInt, 0)
-   .option('-P, --protocol <protocol>', 'WebSocket protocol version', parseInt, 13)
-   .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
-   .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
-   .option('-G, --generator <file>', 'custom message generators')
+cli.usage(['[options] urls',
+    ,'         urls like'
+    ,'         ws://host/path/?params http://host/socket.io/?transport=websocket'
+    ,'         ws://host/path/?params@@192.168.102.33 http://host/socket.io/?transport=websocket@@192.168.102.53'].join("\n"))
+   .option('-A, --amount <connections>', 'the amount of persistent connections to generate, default 10000', parseInt, 10000)
+   .option('-C, --concurrent [connections]', '[deprecated]how many concurrent-connections per second, default 0', parseInt, 0)
+   .option('-M, --messages [messages]', 'number of messages to be send per connection, default 0', parseInt, 0)
+   .option('-P, --protocol [protocol]', 'WebSocket protocol version, default 13', parseInt, 13)
+   .option('-B, --buffer [size]', 'size of the messages that are send, default 1024', parseInt, 1024)
+   .option('-W, --workers [cpus]', 'workers to be spawned, default cpus.length', parseInt, os.cpus().length)
+   .option('-G, --generator [file]', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('-PT, --pingInterval', 'seconds for doing ping to keep-alive', parseInt, 25)
-   .option('-PD, --pingData <data>', 'specify ping data to be send to the server')
-   .option('-RS, --realtimeStat', 'worker will send stat info to master in realtime')
-   .option('-RT, --runtime <seconds>', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
+   .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
+   .option('--SE, --serverEngine [engine]', '"socket.io"/"engine.io"(nodejs), "netty-socketio"(java) must be specified')
+   .option('--RS, --realtimeStat', 'worker will send stat info to master in realtime')
+   .option('--SI, --statInterval [seconds]', 'show stat info interval, default 60', parseInt, 60)
+   .option('--RT, --runtime [seconds]', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
    .version(require('../package.json').version)
    .parse(process.argv);
+
 
 //
 // Check if all required arguments are supplied, if we don't have a valid url we
 // should bail out
 //
 if (!cli.args.length) return [
-    'Thor:'
-  , 'Odin is disappointed in you... pity human! You forgot to supply the urls.'
+    '愚かな人類よ! You forgot to supply the urls. Type -h for help.'
 ].forEach(function stderr(line) {
   console.error(line);
 });
@@ -49,7 +53,9 @@ var cluster = require('cluster')
   , concurrents = Object.create(null)
   , connections = 0
   , received = 0
-  , robin = [];
+  , robin = []
+  , workers = Math.min(cli.amount * cli.args.length, workers)
+  , forked_workers = workers;
 
 cluster.setupMaster({
     exec: path.resolve(__dirname, '../mjolnir.js')
@@ -60,7 +66,8 @@ cluster.setupMaster({
       : path.resolve(__dirname, '../generator.js'),
       cli.protocol,
       !!cli.masked,
-      !!cli.binary
+      !!cli.binary,
+      cli.statInterval
     ]
 });
 
@@ -126,7 +133,7 @@ Object.keys(cluster.workers).forEach(function each(id) {
 function live() {
   var frames = live.frames
     , len = frames.length
-    , interval = 100
+    , interval = cli.statInterval * 1000
     , i = 0;
 
   live.interval = setInterval(function tick() {
@@ -136,7 +143,8 @@ function live() {
 
     process.stdout.write('\r'+ frames[i++ % len] +' Progress :: '.white + [
       'Created '.white + connections.toString().green,
-      'Active '.white + active.toString().green
+      'Active '.white + active.toString().green,
+      '@'.white + new Date().toLocaleString().green
     ].join(', '));
   }, interval);
 }
@@ -176,7 +184,7 @@ live.stop = function stop() {
   , 'God of Thunder, son of Odin and smasher of WebSockets!'
   , ''
   , 'Thou shall:'
-  , '- Spawn '+ cli.workers +' workers.'
+  , '- Spawn '+ forked_workers +' workers.'
   , '- Create '+ (cli.concurrent || 'all the') + ' concurrent/parallel connections.'
   , '- Smash '+ (cli.amount || 'infinite') +' connections with the mighty Mjölnir.'
   , ''
@@ -195,7 +203,8 @@ var metrics = new Metrics(cli.amount * cli.args.length);
 // is helpfull if you are testing multiple loadbalancer endpoints for example.
 async.forEach(cli.args, function forEach(url, done) {
   var i = cli.amount
-    , completed = 0;
+    , completed = 0
+    , goOnTaskQueueWhenConcurrentLimited = (cli.concurrent && cli.concurrent < cli.amount);
 
   console.log('Connecting to %s', url);
 
@@ -216,14 +225,14 @@ async.forEach(cli.args, function forEach(url, done) {
     worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id
       , localaddr: localaddr
       , pingInterval: cli.pingInterval
-      , pingData: cli.pingData
-      , openedStat: (cli.concurrent && cli.concurrent < cli.amount)
+      , serverEngine: cli.serverEngine
+      , nextTask: goOnTaskQueueWhenConcurrentLimited
       , realtimeStat: cli.realtimeStat 
       , runtime: cli.runtime
     });
 
     // do it if cuncurrent is not 0 and smaller than the amount of all tcp connections
-    if (cli.concurrent && cli.concurrent < cli.amount) {
+    if (goOnTaskQueueWhenConcurrentLimited) {
       worker.once('open::'+ id, fn);
     };
 
