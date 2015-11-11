@@ -18,8 +18,9 @@ var masked = process.argv[4] === 'true'
 
 // collect metics datas
 var metrics_datas = {collection:true, datas:[]}
+  , statInterval = +process.argv[6] || 60
   , process_send = function(data, task) {
-      if (task.realtimeStat || ('open' == data.type && task.nextTask)) {
+      if (statInterval <= 0 || ('open' == data.type && task.nextTask)) {
         process.send(data);
       }else{
         metrics_datas.datas.push(data);
@@ -45,7 +46,6 @@ var metrics_datas = {collection:true, datas:[]}
         process_sendAll(true);
       }
     }
-  , statInterval = +process.argv[6] || 60
   , workerStatInterval = setInterval(function () {
       process_sendAll();
     }, statInterval * 1000);

@@ -27,7 +27,6 @@ cli.usage(['[options] urls',
    .option('-b, --binary', 'send binary messages instead of utf-8')
    .option('--TP, --transport [transport]', '"polling"/"websocket" must be specified', 'websocket')
    .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
-   .option('--RS, --realtimeStat', 'worker will send stat info to master in realtime')
    .option('--SI, --statInterval [seconds]', 'show stat info interval, default 60', parseInt, 60)
    .option('--RT, --runtime [seconds]', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
    .version(require('../package.json').version)
@@ -227,7 +226,6 @@ async.forEach(cli.args, function forEach(url, done) {
       , transport: cli.transport
       , pingInterval: cli.pingInterval
       , nextTask: goOnTaskQueueWhenConcurrentLimited
-      , realtimeStat: cli.realtimeStat 
       , runtime: cli.runtime
     });
 
