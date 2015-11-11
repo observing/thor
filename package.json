@@ -1,6 +1,6 @@
 {
   "name": "thor",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Thor is WebSocket benchmark utility",
   "main": "index.js",
   "scripts": {

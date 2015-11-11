@@ -82,7 +82,7 @@ process.on('message', function message(task) {
   var pingInterval = null;
 
   socket.on('open', function open() {
-    process_send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent }, task);
+    process_send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent, workerid: process.pid }, task);
     // write(socket, task, task.id);
 
     if (task.pingInterval && task.pingInterval > 0) {
@@ -106,7 +106,7 @@ process.on('message', function message(task) {
 
   socket.on('message', function message(data) {
     process_send({
-      type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
+      type: 'message', latency: Date.now() - socket.last, concurrent: concurrent, workerid: process.pid,
       id: task.id
     }, task);
 
@@ -116,6 +116,22 @@ process.on('message', function message(task) {
       write(socket, task, task.id);
     } else {
       socket.close();
+      socket.emit('close');
+    }
+  });
+  socket.on('onMessage', function onMessage(data) {
+    process_send({
+      type: 'message', latency: Date.now() - socket.last, concurrent: concurrent, workerid: process.pid,
+      id: task.id
+    }, task);
+
+    // Only write as long as we are allowed to send messages
+    if (task.messages > 0)
+    if (--task.messages) {
+      write(socket, task, task.id);
+    } else {
+      socket.close();
+      socket.emit('close');
     }
   });
 
@@ -123,7 +139,7 @@ process.on('message', function message(task) {
     var internal = socket._socket || {};
 
     process_send({
-      type: 'close', id: task.id, concurrent: --concurrent,
+      type: 'close', id: task.id, concurrent: --concurrent, workerid: process.pid,
       read: internal.bytesRead || 0,
       send: internal.bytesWritten || 0
     }, task);
@@ -134,9 +150,10 @@ process.on('message', function message(task) {
   });
 
   socket.on('error', function error(err) {
-    process_send({ type: 'error', message: err.message, id: task.id, concurrent: --concurrent }, task);
+    process_send({ type: 'error', message: err.message, id: task.id, concurrent: --concurrent, workerid: process.pid }, task);
 
     socket.close();
+    socket.emit('close');
     delete connections[task.id];
     checkConnectionLength();
   });
@@ -149,6 +166,7 @@ process.on('message', function message(task) {
   if (task.runtime && task.runtime > 0) {
     setTimeout(function timeoutToCloseSocket(id, socket) {
       socket.close();
+      socket.emit('close');
     }, task.runtime * 1000, task.id, socket);
   }
 });
@@ -176,9 +194,10 @@ function write(socket, task, id, fn, data) {
       mask: masked
     }, function sending(err) {
       if (err) {
-        process_send({ type: 'error', message: err.message, concurrent: --concurrent, id: id }, task);
+        process_send({ type: 'error', message: err.message, concurrent: --concurrent, workerid: process.pid, id: id }, task);
 
         socket.close();
+        socket.emit('close');
         delete connections[id];
       }
 
