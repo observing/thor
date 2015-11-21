@@ -174,7 +174,7 @@ live.stop = function stop() {
 //
 // Metrics collection.
 //
-var metrics = new Metrics(cli.amount * cli.args.length);
+var metrics = new Metrics(cli.amount * cli.messages);
 
 // Iterate over all the urls so we can target multiple locations at once, which
 // is helpfull if you are testing multiple loadbalancer endpoints for example.
