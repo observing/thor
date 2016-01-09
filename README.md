@@ -57,6 +57,7 @@ Google it.
     -A, --amount <connections>      the amount of persistent connections to generate
     -C, --concurrent <connections>  how many concurrent-connections per second
     -M, --messages <messages>       messages to be send per connection
+    -H, --header [header]           a header to pass to each connection
     -P, --protocol <protocol>       WebSocket protocol version
     -B, --buffer <size>             size of the messages that are send
     -W, --workers <cpus>            workers to be spawned

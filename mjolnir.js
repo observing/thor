@@ -14,7 +14,8 @@ var session = require(process.argv[2]);
 //
 var masked = process.argv[4] === 'true'
   , binary = process.argv[5] === 'true'
-  , protocol = +process.argv[3] || 13;
+  , protocol = +process.argv[3] || 13
+  , headers = JSON.parse(process.argv[6]);
 
 process.on('message', function message(task) {
   var now = Date.now();
@@ -40,8 +41,9 @@ process.on('message', function message(task) {
   // End of the line, we are gonna start generating new connections.
   if (!task.url) return;
 
-  var socket = new Socket(task.url, {
-    protocolVersion: protocol
+  var socket = new Socket(task.url, [], {
+    protocolVersion: protocol,
+    headers: headers
   });
 
   socket.on('open', function open() {
