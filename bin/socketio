@@ -14,9 +14,9 @@ var cli = require('commander');
 
 cli.usage(['[options] urls',
     ,'         urls like'
-    ,'         ws://localhost:8080/?params'
-    ,'         ws://localhost:8080/?params  ws://localhost:8080/socket.io/?transport=websocket'
-    ,'         ws://localhost:8080/?params@@192.168.102.33  ws://localhost:8080/socket.io/?transport=websocket@@192.168.102.53'].join("\n"))
+    ,'         http://localhost:8080/'
+    ,'         http://localhost:8080/?params'
+    ,'         http://localhost:8080/?params@@192.168.102.53'].join("\n"))
    .option('-A, --amount <connections>', 'the amount of persistent connections to generate, default 10000', parseInt, 10000)
    .option('-C, --concurrent [connections]', '[deprecated]how many concurrent-connections per second, default 0', parseInt, 0)
    .option('-M, --messages [messages]', 'number of messages to be send per connection, default 0', parseInt, 0)
@@ -26,7 +26,9 @@ cli.usage(['[options] urls',
    .option('-G, --generator [file]', 'custom message generators')
    .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
-   .option('--SE, --serverEngine [engine]', '"socket.io"/"engine.io"(nodejs), "netty-socketio"(java) must be specified if ur using these engine in ur server')
+   .option('-t, --connectTimeout [connectTimeout]', 'default 5(s)', parseInt, 5)
+   .option('-l, --logError [logError]', 'default 0 means false, otherwise true', parseInt, 0)
+   .option('--TP, --transport [transport]', '"polling"/"websocket" default websocket', 'websocket')
    .option('--PI, --pingInterval [seconds]', 'seconds for doing ping to keep-alive, default 50', parseInt, 50)
    .option('--SI, --statInterval [seconds]', 'show stat info interval, default 60', parseInt, 60)
    .option('--RT, --runtime [seconds]', 'timeout to close socket(seconds), default to unlimited, u must stop by ctrl+c', parseInt, -1)
@@ -51,14 +53,17 @@ var cluster = require('cluster')
   , workers = cli.workers || 1
   , ids = Object.create(null)
   , concurrents = Object.create(null)
+  , concurrent_timestamps = Object.create(null)
   , connections = 0
+  , close_connections = 0
+  , error_connections = 0
   , received = 0
   , robin = []
   , workers = Math.min(cli.amount * cli.args.length, workers)
   , forked_workers = workers;
 
 cluster.setupMaster({
-    exec: path.resolve(__dirname, '../mjolnir.js')
+    exec: path.resolve(__dirname, '../worker-socketio.js')
   , silent: false
   , args: [
       cli.generator
@@ -67,7 +72,8 @@ cluster.setupMaster({
       cli.protocol,
       !!cli.masked,
       !!cli.binary,
-      cli.statInterval
+      cli.statInterval,
+      cli.logError
     ]
 });
 
@@ -75,7 +81,11 @@ while (workers--) cluster.fork();
 
 Object.keys(cluster.workers).forEach(function each(id) {
   var worker = cluster.workers[id];
-
+  /**
+   * message from worker via IPC
+   * @param  {Array|Object}  data) Array of Object or Object{id:connection_id, wid:worker_id, ...}
+   * @return null
+   */
   worker.on('message', function message(data) {
   
   var datas = [];
@@ -86,7 +96,11 @@ Object.keys(cluster.workers).forEach(function each(id) {
   }
   for (var i = 0; i < datas.length; i++) {
     var data = datas[i];
-    if ('concurrent' in data) concurrents[data.workerid] = data.concurrent;
+    if ('concurrent' in data && 'cur_time' in data) {
+      if (!concurrent_timestamps[data.wid] || concurrent_timestamps[data.wid] < data.cur_time) {
+        concurrents[data.wid] = data.concurrent;
+      }
+    }
 
     switch (data.type) {
       case 'open':
@@ -101,12 +115,14 @@ Object.keys(cluster.workers).forEach(function each(id) {
         delete ids[data.id];
 
         metrics.close(data);
+        ++close_connections;
         break;
 
       case 'error':
         delete ids[data.id];
 
         metrics.error(data);
+        ++error_connections;
         break;
 
       case 'message':
@@ -141,9 +157,12 @@ function live() {
       return count + (concurrents[id] || 0);
     }, 0);
 
-    process.stdout.write('\r'+ frames[i++ % len] +' Progress :: '.white + [
+    // process.stdout.write('\r'+ frames[i++ % len] +' Progress :: '.white + [
+    console.log('\r'+ frames[i++ % len] +' Progress :: '.white + [
       'Created '.white + connections.toString().green,
       'Active '.white + active.toString().green,
+      'Error '.white + error_connections.toString().green,
+      'Received '.white + received.toString().green,
       '@'.white + new Date().toLocaleString().green
     ].join(', '));
   }, interval);
@@ -170,7 +189,8 @@ live.frames = [
  * @api private
  */
 live.stop = function stop() {
-  process.stdout.write('\u001b[2K');
+  // process.stdout.write('\u001b[2K');
+  console.log('');
   clearInterval(live.interval);
 };
 
@@ -222,10 +242,11 @@ async.forEach(cli.args, function forEach(url, done) {
     // Process the connections
     worker.send({ url: url, size: cli.buffer, messages: cli.messages, id: id
       , localaddr: localaddr
-      , serverEngine: cli.serverEngine
+      , transport: cli.transport.split(',')
       , pingInterval: cli.pingInterval
       , nextTask: goOnTaskQueueWhenConcurrentLimited
       , runtime: cli.runtime
+      , connectTimeout: cli.connectTimeout
     });
 
     // do it if cuncurrent is not 0 and smaller than the amount of all tcp connections
@@ -250,7 +271,8 @@ async.forEach(cli.args, function forEach(url, done) {
 // We are setup, everything is running
 //
 console.log('');
-live();
+// live();
+setTimeout(live, 1000);
 
 process.once('SIGINT', function end() {
   robin.forEach(function nuke(worker) {
