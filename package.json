@@ -22,8 +22,8 @@
     "async": "0.2.x",
     "tab": "0.1.x",
     "colors": "0.6.x",
-    "ws": "git://github.com/einaros/ws.git",
-    "fast-stats": "git://github.com/bluesmoon/node-faststats.git",
+    "ws": "https://github.com/einaros/ws.git",
+    "fast-stats": "https://github.com/bluesmoon/node-faststats.git",
     "sugar": "1.3.8"
   },
   "bin": {
