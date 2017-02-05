@@ -20,7 +20,6 @@ cli.usage('[options] ws://localhost')
    .option('-B, --buffer <size>', 'size of the messages that are send', parseInt, 1024)
    .option('-W, --workers <cpus>', 'workers to be spawned', parseInt, os.cpus().length)
    .option('-G, --generator <file>', 'custom message generators')
-   .option('-M, --masked', 'send the messaged with a mask')
    .option('-b, --binary', 'send binary messages instead of utf-8')
    .version(require('../package.json').version)
    .parse(process.argv);
@@ -55,7 +54,6 @@ cluster.setupMaster({
       ? path.resolve(process.cwd(), cli.generator)
       : path.resolve(__dirname, '../generator.js'),
       cli.protocol,
-      !!cli.masked,
       !!cli.binary
     ]
 });
