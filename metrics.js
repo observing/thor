@@ -144,6 +144,8 @@ Metrics.prototype.summary = function summary() {
   results.writeRow(['Total transferred', this.send.bytes(2)]);
   results.writeRow(['Total received', this.read.bytes(2)]);
 
+  results.writeRow(['Requests per second', (this.requests / this.timing.duration * 1000).toFixed(2) + ' /s'])
+
   // Up next is outputting the series.
   var handshaking = this.handshaking
     , latency = this.latency
