@@ -1,5 +1,6 @@
 'use strict';
 
+var fs = require('fs');
 var Socket = require('ws')
   , connections = {}
   , concurrent = 0;
@@ -14,7 +15,9 @@ var session = require(process.argv[2]);
 //
 var masked = process.argv[4] === 'true'
   , binary = process.argv[5] === 'true'
-  , protocol = +process.argv[3] || 13;
+  , protocol = +process.argv[3] || 13
+  , SSLcertificate = process.argv[6]
+  , isSSL = process.argv[7] === 'true';
 
 process.on('message', function message(task) {
   var now = Date.now();
@@ -40,9 +43,17 @@ process.on('message', function message(task) {
   // End of the line, we are gonna start generating new connections.
   if (!task.url) return;
 
-  var socket = new Socket(task.url, {
+  var socket;
+  if (isSSL) 
+  {socket = new Socket(task.url, {
+    protocolVersion: protocol,
+    ca : [fs.readFileSync(SSLcertificate)]
+  }); }
+  else
+  { socket = new Socket(task.url, {
     protocolVersion: protocol
   });
+  }
 
   socket.on('open', function open() {
     process.send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent });
