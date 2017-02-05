@@ -18,13 +18,13 @@
   "author": "Arnout Kazemier <opensource@observe.it>",
   "license": "MIT",
   "dependencies": {
-    "commander": "1.1.x",
     "async": "0.2.x",
-    "tab": "0.1.x",
     "colors": "0.6.x",
-    "ws": "git://github.com/einaros/ws.git",
-    "fast-stats": "git://github.com/bluesmoon/node-faststats.git",
-    "sugar": "1.3.8"
+    "commander": "1.1.x",
+    "fast-stats": "0.0.3",
+    "sugar": "1.3.8",
+    "tab": "0.1.x",
+    "ws": "^1.1.1"
   },
   "bin": {
     "thor": "./bin/thor"
