@@ -46,22 +46,29 @@ process.on('message', function message(task) {
 
   socket.on('open', function open() {
     process.send({ type: 'open', duration: Date.now() - now, id: task.id, concurrent: concurrent });
-    write(socket, task, task.id);
-
+    socket.send('{"channel":"/meta/handshake","version":"1.0","supportedConnectionTypes":["websocket","long-polling"],"id":"1"}'.toString('utf-8'));
+    
     // As the `close` event is fired after the internal `_socket` is cleaned up
     // we need to do some hacky shit in order to tack the bytes send.
   });
 
   socket.on('message', function message(data) {
-    process.send({
-      type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
-      id: task.id
-    });
-
-    // Only write as long as we are allowed to send messages
-    if (--task.messages) {
-      write(socket, task, task.id);
-    } else {
+    if (data.indexOf('"/meta/handshake","successful":true') > -1) {
+      data = JSON.parse(data);
+      var clientId = data[0].clientId;
+      var msgId = data[0].id;
+      var msg = '{"channel":"/meta/connect","clientId":"' + clientId + '","connectionType":"websocket","id":"' + msgId + '"}';
+      socket.send(msg.toString('utf-8'));
+      var channel = '/chat';
+      msg = '[{"channel":"/meta/subscribe","clientId":"'+ clientId + '","subscription":"' + channel + '","id":"' + msgId + '"}]';
+      socket.last = Date.now();
+      socket.send(msg.toString('utf-8'));
+    } else if (data.indexOf('"/meta/subscribe","successful":true') > -1) {
+      process.send({
+        type: 'message', latency: Date.now() - socket.last, concurrent: concurrent,
+        id: task.id
+      });
+    } else if (data.indexOf('"channel":"/chat') > -1) {
       socket.close();
     }
   });
