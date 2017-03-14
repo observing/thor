@@ -9,11 +9,13 @@ fixes all of this.
 
 ### Dependencies
 
-Thor requires Node.js to be installed on your system. If you don't have Node.js
-installed you can download it from http://nodejs.org or build it from the github
-source repository: http://github.com/joyent/node.
+Thor requires Node.js and Git to be installed on your system.
+If you don't have Node.js installed you can download it from http://nodejs.org
+or build it from the github source repository: http://github.com/joyent/node.
+If you don't have Git install you can download and install it from
+https://git-scm.com/downloads or using your operating system's package manager.
 
-Once you have Node.js installed, you can use the bundled package manager `npm` to
+Once you have Node.js and Git installed, you can use the bundled package manager `npm` to
 install this module:
 
 ```
@@ -21,6 +23,16 @@ npm install -g thor
 ```
 
 The `-g` command flag tells `npm` to install the module globally on your system.
+
+An alternate way to install is to first clone the git package with git:
+```
+git clone https://github.com/observing/thor.git
+```
+then install with npm locally:
+```
+cd thor/
+npm install -g .
+```
 
 ### Usage
 
